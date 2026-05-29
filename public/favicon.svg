@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ec4899" />
+      <stop offset="50%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#4f46e5" />
+    </linearGradient>
+    <linearGradient id="glow-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background base rounded-rect with ambient border -->
+  <rect x="6" y="6" width="116" height="116" rx="32" fill="#1e1b4b" stroke="url(#shield-grad)" stroke-width="4" />
+  
+  <!-- Subtle inner gradient glow -->
+  <rect x="10" y="10" width="108" height="108" rx="28" fill="url(#glow-grad)" opacity="0.15" />
+
+  <!-- Pixel Canvas Grid Matrix (abstract steganography background representation) -->
+  <rect x="22" y="24" width="14" height="14" rx="4" fill="#a78bfa" opacity="0.15" />
+  <rect x="42" y="24" width="14" height="14" rx="4" fill="#ec4899" opacity="0.3" />
+  <rect x="62" y="24" width="14" height="14" rx="4" fill="#a78bfa" opacity="0.1" />
+  <rect x="82" y="24" width="14" height="14" rx="4" fill="#818cf8" opacity="0.25" />
+
+  <rect x="22" y="44" width="14" height="14" rx="4" fill="#818cf8" opacity="0.2" />
+  <rect x="42" y="44" width="14" height="14" rx="4" fill="#a78bfa" opacity="0.12" />
+  <rect x="62" y="44" width="14" height="14" rx="4" fill="#ec4899" opacity="0.2" />
+  <rect x="82" y="44" width="14" height="14" rx="4" fill="#a78bfa" opacity="0.15" />
+
+  <!-- Glowing core shield padlock outline -->
+  <path d="M64,36 C52.95,36 44,44.95 44,56 L44,66 C40.69,66 38,68.69 38,72 L38,92 C38,95.31 40.69,98 44,98 L84,98 C87.31,98 90,95.31 90,92 L90,72 C90,68.69 87.31,66 84,66 L84,56 C84,44.95 75.05,36 64,36 Z" fill="url(#shield-grad)" />
+  
+  <!-- Shackle (Arch of standard padlock) -->
+  <path d="M52,56 C52,49.37 57.37,44 64,44 C70.63,44 76,49.37 76,56 L76,66 L52,66 L52,56 Z" fill="#1e1b4b" />
+
+  <!-- Inner Keyhole Sparkle Details -->
+  <circle cx="64" cy="78" r="5" fill="#ffffff" />
+  <polygon points="62,78 66,78 68,91 60,91" fill="#ffffff" />
+
+  <!-- Steganography sparkles -->
+  <path d="M102,42 L105,48 L111,51 L105,54 L102,60 L99,54 L93,51 L99,48 Z" fill="#ec4899" />
+  <path d="M26,82 L28,86 L32,88 L28,90 L26,94 L24,90 L20,88 L24,86 Z" fill="#38bdf8" />
+</svg>

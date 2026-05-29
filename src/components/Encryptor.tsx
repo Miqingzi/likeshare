@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { 
   Upload, FileText, Lock, Eye, EyeOff, Music, Video, Image as ImageIcon,
   Download, RefreshCw, CheckCircle, Shield, Sparkles, Clipboard, ClipboardCheck, ClipboardPaste
@@ -31,6 +31,66 @@ export default function Encryptor() {
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTextInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+      
+      let containsFile = false;
+      if (e.clipboardData) {
+        if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+          containsFile = true;
+        } else if (e.clipboardData.items) {
+          for (let i = 0; i < e.clipboardData.items.length; i++) {
+            if (e.clipboardData.items[i].kind === "file") {
+              containsFile = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (isTextInput && !containsFile) {
+        return;
+      }
+
+      if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+        const files = e.clipboardData.files;
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          if (f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/") || f.type.replace(/\s/g, "").startsWith("text/")) {
+            e.preventDefault();
+            setFile(f);
+            return;
+          }
+        }
+      }
+
+      if (e.clipboardData && e.clipboardData.items) {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === "file") {
+            const blob = item.getAsFile();
+            if (blob) {
+              e.preventDefault();
+              let ext = item.type.split("/")[1] || "bin";
+              if (ext.includes("+") || ext.length > 5) ext = "bin";
+              const fileObj = new File([blob], `pasted_encrypt_file_${Date.now()}.${ext}`, { type: item.type });
+              setFile(fileObj);
+              return;
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => {
+      window.removeEventListener("paste", handleGlobalPaste);
+    };
+  }, []);
 
   // File size formatter
   const formatSize = (bytes: number) => {
@@ -98,17 +158,12 @@ export default function Encryptor() {
           }
         }
       }
-      setPasteError("剪切板中未找到合适的文件。请复制任意文件或截图，再点击进行快捷导入。");
-      setTimeout(() => setPasteError(""), 3500);
+      setPasteError("剪切板中未找到合适的文件。请复制任意文件或直接在页面上按键盘 Ctrl+V 快捷键进行粘贴。");
+      setTimeout(() => setPasteError(""), 5000);
     } catch (err: any) {
       console.error("Paste helper caught clipboard permission/execution error:", err);
-      const isPolicyBlocked = err?.message?.includes("permissions policy") || err?.name === "SecurityError" || (typeof window !== "undefined" && window.self !== window.top);
-      if (isPolicyBlocked) {
-        setPasteError("安全限制：剪贴板读取已被浏览器沙盒隔离，建议点击新窗口打开体验，或直接拖拽文件导入。");
-      } else {
-        setPasteError("读取剪切板出错：请检查是否授权相关权限或直接拖放文件。");
-      }
-      setTimeout(() => setPasteError(""), 5000);
+      setPasteError("💡 浏览器原生剪贴板 API 读取受限。请您直接通过键盘快捷键【Ctrl+V】或【Cmd+V】在任意地方粘贴解析！已为您启用全局事件监听协助极速一键闪电处理。");
+      setTimeout(() => setPasteError(""), 10000);
     }
   };
 

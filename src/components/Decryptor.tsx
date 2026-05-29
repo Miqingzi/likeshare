@@ -60,6 +60,66 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
     }
   }, [isFullScreenImage, onFullScreenToggle]);
 
+  useEffect(() => {
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      // If user is pasting into other textual input fields inside the app, and it doesn't contain a file, don't hijack it
+      const target = e.target as HTMLElement;
+      const isTextInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA") && target.id !== "decrypt-password-input";
+      
+      let containsFile = false;
+      if (e.clipboardData) {
+        if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+          containsFile = true;
+        } else if (e.clipboardData.items) {
+          for (let i = 0; i < e.clipboardData.items.length; i++) {
+            if (e.clipboardData.items[i].kind === "file") {
+              containsFile = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (isTextInput && !containsFile) {
+        return;
+      }
+
+      if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+        const files = e.clipboardData.files;
+        for (let i = 0; i < files.length; i++) {
+          if (files[i].type.startsWith("image/")) {
+            e.preventDefault();
+            const pastedFile = files[i];
+            setFile(pastedFile);
+            await triggerAutoDecryption(pastedFile, "");
+            return;
+          }
+        }
+      }
+
+      if (e.clipboardData && e.clipboardData.items) {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf("image") !== -1) {
+            const blob = items[i].getAsFile();
+            if (blob) {
+              e.preventDefault();
+              const fileObj = new File([blob], `pasted_crypto_canvas_${Date.now()}.png`, { type: "image/png" });
+              setFile(fileObj);
+              await triggerAutoDecryption(fileObj, "");
+              return;
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => {
+      window.removeEventListener("paste", handleGlobalPaste);
+    };
+  }, [shouldBlur, password]);
+
   // Formatter helpers
   const formatSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
@@ -302,17 +362,13 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
           }
         }
       }
-      setPasteError("剪切板中未检测到 PNG 加密画纸。请复制加密后的图像文件，再点击此处进行贴入。");
-      setTimeout(() => setPasteError(""), 3500);
+      setPasteError("剪切板中未检测到 PNG 加密画纸。请复制加密后的图像文件，或直接在页面上按键盘 Ctrl+V 快捷键进行粘贴。");
+      setTimeout(() => setPasteError(""), 5000);
     } catch (err: any) {
       console.error("Paste helper caught clipboard permission/execution error in decryptor:", err);
-      const isPolicyBlocked = err?.message?.includes("permissions policy") || err?.name === "SecurityError" || (typeof window !== "undefined" && window.self !== window.top);
-      if (isPolicyBlocked) {
-        setPasteError("安全限制：还原读取已被浏览器沙盒隔离，建议点击新窗口打开体验，或直接拖拽文件导入。");
-      } else {
-        setPasteError("访问剪贴板出错：请检查权限设置，或者点击上方手动浏览文件。");
-      }
-      setTimeout(() => setPasteError(""), 5000);
+      // Encourage key binding paste as a highly compatible, browser-approved native method that is never blocked
+      setPasteError("💡 浏览器原生剪贴板 API 读取受限。请您直接通过键盘快捷键【Ctrl+V】或【Cmd+V】在任意地方粘贴解析！已为您启用全局事件监听协助极速一键闪电处理。");
+      setTimeout(() => setPasteError(""), 10000);
     }
   };
 
