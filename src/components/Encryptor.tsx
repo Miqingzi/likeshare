@@ -241,14 +241,32 @@ export default function Encryptor() {
   };
 
   // Download trigger
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!encryptedResult || !file) return;
-    const link = document.createElement("a");
-    // Generate name suffix
-    const originalNameWithoutExt = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
-    link.download = `${originalNameWithoutExt}_secure.png`;
-    link.href = encryptedResult.dataUrl;
-    link.click();
+    try {
+      // Convert Data URL to standard Blob object
+      const response = await fetch(encryptedResult.dataUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement("a");
+      const originalNameWithoutExt = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
+      link.download = `${originalNameWithoutExt}_secure.png`;
+      link.href = blobUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up memory after triggering the browser's download queue
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 200);
+    } catch (err) {
+      console.warn("Same-origin Blob download failed, attempting native base64 fallback:", err);
+      const link = document.createElement("a");
+      const originalNameWithoutExt = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
+      link.download = `${originalNameWithoutExt}_secure.png`;
+      link.href = encryptedResult.dataUrl;
+      link.click();
+    }
   };
 
   const resetAll = () => {
@@ -459,27 +477,23 @@ export default function Encryptor() {
               <Download className="w-3.5 h-3.5" />
               <span>下载画纸</span>
             </button>
+            {/* Clipboard image-copy is disabled to prevent OS re-compression from stripping fine pixel metadata */}
             <button
-              onClick={handleCopyToClipboard}
+              disabled={true}
               type="button"
-              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+              className="py-1.5 px-3 bg-slate-50 text-slate-400 border border-slate-200/50 rounded-xl text-xs font-bold flex items-center gap-1 cursor-not-allowed select-none relative group"
             >
-              {copyStatus === "success" ? (
-                <>
-                  <ClipboardCheck className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>已复制</span>
-                </>
-              ) : copyStatus === "error" ? (
-                <>
-                  <Clipboard className="w-3.5 h-3.5 text-rose-500" />
-                  <span>复制失败</span>
-                </>
-              ) : (
-                <>
-                  <Clipboard className="w-3.5 h-3.5" />
-                  <span>复制数据图</span>
-                </>
-              )}
+              <Clipboard className="w-3.5 h-3.5" />
+              <span>无法复制 (防压缩损坏)</span>
+              
+              {/* Tooltip explanation */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-900 border border-slate-800 text-white text-[11px] rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-30 font-sans leading-normal">
+                <p className="font-bold text-rose-300 mb-1 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  为什么禁用复制图片？
+                </p>
+                浏览器和操作系统剪贴板在复制真实“图像”时会强制执行有损重合和元数据剥离，导致无损隐写载荷彻底失效损坏。请务必使用左侧的 <b>「下载画纸」</b> 保存完全无损的原 PNG 格式！
+              </div>
             </button>
             <button
               onClick={resetAll}
@@ -503,14 +517,14 @@ export default function Encryptor() {
                 AES-255-GCM
               </div>
               
-              {/* Visual Encrypted image pixel box */}
+              {/* Visual Encrypted image pixel box - using the real encrypted result to enable mobile long-press save */}
               <div className="relative group max-w-full my-4">
                 <div className="absolute -inset-2 bg-indigo-500/10 rounded-xl blur-lg opacity-80 group-hover:opacity-100 transition duration-300"></div>
                 <img
-                  src={girlPearlEarringAssetUrl}
+                  src={encryptedResult.dataUrl}
                   alt="加密生成图"
                   referrerPolicy="no-referrer"
-                  className="relative rounded-lg shadow-2xl border border-slate-800 max-h-[220px] object-contain rendering-pixelated select-none"
+                  className="relative rounded-lg shadow-2xl border border-slate-800 max-h-[220px] object-contain rendering-pixelated cursor-pointer select-text pointer-events-auto"
                   style={{ imageRendering: "pixelated" }}
                 />
               </div>
@@ -519,6 +533,13 @@ export default function Encryptor() {
               <p className="text-slate-400 font-mono text-[10px] sm:text-xs mt-3 flex items-center gap-1 py-1 px-3 rounded-full bg-slate-900/60 border border-slate-800/80 select-none">
                 画纸分辨率: <span className="text-white font-bold">{encryptedResult.width} × {encryptedResult.height}</span> 像素
               </p>
+
+              {/* Mobile instruction prompt */}
+              {typeof navigator !== "undefined" && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
+                <p className="text-pink-400 font-normal text-[11px] mt-3.5 text-center leading-relaxed max-w-[280px] bg-pink-500/10 border border-pink-500/20 px-3 py-2 rounded-xl animate-pulse">
+                  💡 <b>移动端无损保存提示：</b> 若点击下载无响应，可直接<b>「长按上方画纸」</b>呼出系统菜单，选择 <b>「保存图片 / 添加至照片」</b> 即可完美储存在本地相册！
+                </p>
+              )}
             </div>
 
             {/* Actions & Insights */}
