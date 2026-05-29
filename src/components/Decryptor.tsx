@@ -1,8 +1,9 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { 
   FileLock2, Eye, EyeOff, Lock, Play, Music, Video, Image as ImageIcon,
   Download, RefreshCw, FileText, CheckCircle, ShieldAlert, Sparkles, 
-  Clipboard, ClipboardCheck, ClipboardPaste, ZoomIn, X, Settings
+  Clipboard, ClipboardCheck, ClipboardPaste, ZoomIn, ZoomOut, X, Settings
 } from "lucide-react";
 import { decodeAndDecryptFromPNG, decryptPayload } from "../utils/crypto";
 import { DecryptedFile } from "../types";
@@ -19,9 +20,10 @@ function readUInt32BE(bin: Uint8Array, offset: number): number {
 
 interface DecryptorProps {
   shouldBlur: boolean;
+  onFullScreenToggle?: (isOpen: boolean) => void;
 }
 
-export default function Decryptor({ shouldBlur }: DecryptorProps) {
+export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorProps) {
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -46,10 +48,17 @@ export default function Decryptor({ shouldBlur }: DecryptorProps) {
 
   // Overlay preview state
   const [isFullScreenImage, setIsFullScreenImage] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState<number>(100); // Scale percentage: 50%, 75%, 100%, 125%, 150%, 200%
   const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">("idle");
   const [pasteError, setPasteError] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (onFullScreenToggle) {
+      onFullScreenToggle(isFullScreenImage);
+    }
+  }, [isFullScreenImage, onFullScreenToggle]);
 
   // Formatter helpers
   const formatSize = (bytes: number) => {
@@ -765,12 +774,13 @@ export default function Decryptor({ shouldBlur }: DecryptorProps) {
             <button
               onClick={handleCopyDecryptedData}
               type="button"
-              className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl flex items-center justify-center cursor-pointer transition-colors"
+              disabled={decryptedResult.type.startsWith("video/")}
+              className="p-2.5 bg-slate-100 hover:bg-slate-200 disabled:hover:bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center cursor-pointer disabled:cursor-not-allowed disabled:opacity-45 transition-colors"
               title={
-                decryptedResult.type.startsWith("image/") 
-                  ? "复制已解密图片 (Copy Image)" 
-                  : decryptedResult.type.startsWith("video/") 
-                    ? "复制已解密视频 (Copy Video)" 
+                decryptedResult.type.startsWith("video/") 
+                  ? "视频暂不支持直接复制数据 (Video Copying Disabled)" 
+                  : decryptedResult.type.startsWith("image/") 
+                    ? "复制已解密图片 (Copy Image)" 
                     : "复制解密数据 (Copy Data)"
               }
             >
@@ -792,7 +802,7 @@ export default function Decryptor({ shouldBlur }: DecryptorProps) {
             </button>
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-6 items-start">
+          <div className="flex flex-col lg:flex-row gap-5 items-start">
             {/* Visual Media Showcase */}
             <div className="flex-1 w-full bg-slate-50 p-4 border border-slate-200/50 rounded-2xl">
               <span className="text-[10px] sm:text-xs font-bold text-slate-400 block mb-3 font-mono">MEDIA_RENDER_OUTPUT // 媒体在线渲染</span>
@@ -800,24 +810,20 @@ export default function Decryptor({ shouldBlur }: DecryptorProps) {
             </div>
 
             {/* Metadata Restored Lists */}
-            <div className="flex-1 w-full flex flex-col justify-between gap-6 self-stretch">
-              <div className="flex flex-col gap-4">
-                <span className="text-[10px] sm:text-xs font-bold text-slate-400 block font-mono">METADATA_EXTRACTED // 恢复数据明细</span>
-                <div className="grid grid-cols-1 gap-2.5 font-mono text-[11px] text-slate-600">
-                  <div className="p-3 bg-slate-50/60 border border-slate-200/50 rounded-xl flex flex-col gap-1">
-                    <span className="text-[10px] text-slate-400">文件名</span>
-                    <span className="font-bold text-slate-800 break-all">{decryptedResult.name}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="p-3 bg-slate-50/60 border border-slate-200/50 rounded-xl flex flex-col gap-1">
-                      <span className="text-[10px] text-slate-400">恢复类型 (MIME)</span>
-                      <span className="font-bold text-indigo-600 truncate" title={decryptedResult.type}>{decryptedResult.type}</span>
-                    </div>
-                    <div className="p-3 bg-slate-50/60 border border-slate-200/50 rounded-xl flex flex-col gap-1">
-                      <span className="text-[10px] text-slate-400">解析大小 (Size)</span>
-                      <span className="font-bold text-emerald-600">{formatSize(decryptedResult.size)}</span>
-                    </div>
-                  </div>
+            <div className="w-full lg:w-[280px] shrink-0 flex flex-col gap-2">
+              <span className="text-[10px] font-bold text-slate-400 block font-mono tracking-wider">METADATA_EXTRACTED // 恢复数据明细</span>
+              <div className="p-3 bg-slate-50/70 border border-slate-200/40 rounded-xl font-mono text-[11px] text-slate-600 flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-3 border-b border-slate-200/30 pb-2">
+                  <span className="text-slate-400 shrink-0">文件名</span>
+                  <span className="font-semibold text-slate-800 break-all text-right select-all">{decryptedResult.name}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200/30 pb-2">
+                  <span className="text-slate-400 shrink-0">恢复类型</span>
+                  <span className="font-semibold text-indigo-600 truncate max-w-[160px]" title={decryptedResult.type}>{decryptedResult.type}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-400 shrink-0">解析大小</span>
+                  <span className="font-bold text-emerald-600">{formatSize(decryptedResult.size)}</span>
                 </div>
               </div>
             </div>
@@ -826,20 +832,27 @@ export default function Decryptor({ shouldBlur }: DecryptorProps) {
       )}
 
       {/* High-Fidelity Full-Screen Zoom Overlay Modal */}
-      {isFullScreenImage && fileUrl && decryptedResult && (
+      {isFullScreenImage && fileUrl && decryptedResult && createPortal(
         <div 
-          className="fixed inset-0 z-[100] bg-slate-950/98 backdrop-blur-3xl overflow-y-auto flex flex-col items-center justify-start py-6 sm:py-8 px-4 gap-4 sm:gap-6 animate-fade-in"
+          className="fixed inset-0 z-[99999] bg-slate-950/80 backdrop-blur-xl flex flex-col justify-between items-center p-4 sm:p-6 overflow-hidden animate-fade-in text-white"
           onClick={() => setIsFullScreenImage(false)}
         >
-          {/* Header Bar containing Controls (Blur switch, Download, Close) */}
-          <div className="w-full max-w-4xl flex justify-between items-center gap-3 z-10 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
+          {/* Header Bar containing Controls (Blur switch, Download, Zoom, Close) */}
+          <div className="w-full max-w-5xl flex items-center justify-between gap-2 z-10 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1.5 md:gap-2.5 min-w-0">
+              {/* Incognito indicator badge */}
+              <div className="flex items-center gap-1.5 py-1 px-2.5 bg-white/5 border border-white/10 rounded-xl text-[10px] text-slate-300 font-mono tracking-wider shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse shrink-0"></span>
+                <span className="font-bold sm:inline hidden">INCOGNITO VIEWER // 弹窗式图片浏览器</span>
+                <span className="font-bold inline sm:hidden">隐身预览</span>
+              </div>
+
               {/* Blur toggle button */}
               {(decryptedResult.type.startsWith("image/") || decryptedResult.type.startsWith("video/")) && (
                 <button
                   type="button"
                   onClick={() => setIsBlurredFullScreen(!isBlurredFullScreen)}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-3 sm:px-4 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer shadow-md ${
+                  className={`flex items-center justify-center gap-1 py-1 px-2 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold transition-all duration-200 cursor-pointer shadow-md shrink-0 ${
                     isBlurredFullScreen 
                       ? "bg-amber-500 hover:bg-amber-600 text-white" 
                       : "bg-white/10 hover:bg-white/20 text-slate-200"
@@ -849,116 +862,163 @@ export default function Decryptor({ shouldBlur }: DecryptorProps) {
                   {isBlurredFullScreen ? (
                     <>
                       <Eye className="w-3.5 h-3.5 text-white" />
-                      <span className="hidden sm:inline">查看明文</span>
+                      <span className="hidden md:inline">查看明文</span>
                     </>
                   ) : (
                     <>
                       <EyeOff className="w-3.5 h-3.5 text-amber-300" />
-                      <span className="hidden sm:inline">遮罩模糊</span>
+                      <span className="hidden md:inline">遮罩模糊</span>
                     </>
                   )}
                 </button>
               )}
 
+              {/* Zoom scale controller (only for images & videos) */}
+              {(decryptedResult.type.startsWith("image/") || decryptedResult.type.startsWith("video/")) && (
+                <div className="flex items-center bg-white/10 rounded-xl p-0.5 px-1 sm:px-1.5 gap-0.5 sm:gap-1 text-white border border-white/5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idx = [50, 75, 100, 125, 150, 175, 200, 250, 300].indexOf(zoomLevel);
+                      if (idx > 0) setZoomLevel([50, 75, 100, 125, 150, 175, 200, 250, 300][idx - 1]);
+                    }}
+                    className="p-1 hover:bg-white/10 rounded text-slate-300 hover:text-white cursor-pointer transition-colors"
+                    title="缩小"
+                  >
+                    <ZoomOut className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(100)}
+                    className="px-1 text-[9px] sm:text-xs font-mono hover:bg-white/10 rounded text-slate-200 hover:text-white py-0.5 cursor-pointer transition-colors"
+                    title="重置100%"
+                  >
+                    {zoomLevel}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const levels = [50, 75, 100, 125, 150, 175, 200, 250, 300];
+                      const idx = levels.indexOf(zoomLevel);
+                      if (idx !== -1 && idx < levels.length - 1) setZoomLevel(levels[idx + 1]);
+                    }}
+                    className="p-1 hover:bg-white/10 rounded text-slate-300 hover:text-white cursor-pointer transition-colors"
+                    title="放大"
+                  >
+                    <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-1.5 shrink-0">
               {/* Download / Save button based on client operating system */}
               <button
                 type="button"
                 onClick={handleDownload}
-                className="py-2 px-3 sm:px-4 bg-gradient-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all duration-200 hover:scale-[1.01]"
+                className="py-1 px-2 sm:py-1.5 sm:px-4 bg-gradient-to-r from-pink-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center justify-center gap-1 cursor-pointer transition-all duration-200 hover:scale-[1.01] shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>
-                  {typeof navigator !== "undefined" && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-                    ? "保存"
-                    : "下载"}
-                </span>
+                <span className="hidden xs:inline">立即下载</span>
+                <span className="inline xs:hidden">下载</span>
+              </button>
+
+              <button 
+                type="button"
+                className="p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 hover:text-pink-400 text-white rounded-xl transition-all flex items-center gap-1.5 shadow-lg cursor-pointer text-xs font-bold shrink-0"
+                onClick={() => setIsFullScreenImage(false)}
+              >
+                <X className="w-4 h-4" />
+                <span className="hidden sm:inline">关闭</span>
               </button>
             </div>
-            
-            <button 
-              type="button"
-              className="p-2.5 bg-white/10 hover:bg-white/20 hover:text-pink-400 text-white rounded-xl transition-all flex items-center gap-1.5 shadow-lg cursor-pointer"
-              onClick={() => setIsFullScreenImage(false)}
-            >
-              <X className="w-4 h-4" />
-              <span className="text-xs font-bold leading-none">关闭</span>
-            </button>
           </div>
 
-          {/* Central Media Container - Robust Aspect Ratio Control */}
+          {/* Central Media Container with flex-1 dynamic viewport scaling */}
           <div 
-            className="w-full max-w-4xl flex items-center justify-center relative z-0"
+            className="flex-grow w-full max-w-5xl flex items-center justify-center overflow-auto min-h-0 relative z-0 p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {decryptedResult.type.startsWith("image/") ? (
-              <img 
-                src={fileUrl} 
-                alt="全屏渲染预览" 
-                referrerPolicy="no-referrer"
-                className={`max-h-[58vh] sm:max-h-[64vh] max-w-full rounded-2xl object-contain shadow-2xl transition-all duration-300 ${
-                  isBlurredFullScreen ? "blur-2xl scale-[1.01]" : "filter-none"
-                }`}
-              />
-            ) : decryptedResult.type.startsWith("video/") ? (
-              <video 
-                key={fileUrl}
-                autoPlay
-                controls
-                playsInline
-                preload="auto"
-                loop
-                className={`max-h-[58vh] sm:max-h-[64vh] max-w-full rounded-2xl object-contain shadow-2xl transition-all duration-300 ${
-                  isBlurredFullScreen ? "blur-2xl scale-[1.01]" : "filter-none"
-                }`}
-              >
-                <source src={fileUrl} type={decryptedResult.type} />
-                您的浏览器不支持 HTML5 视频播放。
-              </video>
-            ) : decryptedResult.type.startsWith("audio/") ? (
-              <div className="flex flex-col items-center gap-4 bg-slate-900/90 border border-slate-850 p-8 rounded-3xl text-white max-w-sm w-full shadow-2xl">
-                <Music className="w-12 h-12 text-pink-400 animate-bounce" />
-                <span className="text-sm font-semibold break-all text-center">{decryptedResult.name}</span>
-                <audio src={fileUrl} controls className="w-full mt-2" />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3 bg-slate-900/90 border border-slate-850 p-8 rounded-3xl text-white max-w-sm w-full shadow-2xl text-center">
-                <FileText className="w-12 h-12 text-indigo-400" />
-                <span className="text-sm font-semibold break-all">{decryptedResult.name}</span>
-                <span className="text-xs text-slate-400">二进制常规文件不支持直接视图预览，可点击下方按钮保存</span>
-              </div>
-            )}
+            <div 
+              className="transition-transform duration-200 ease-out flex items-center justify-center max-h-full max-w-full"
+              style={{ transform: `scale(${zoomLevel / 100})` }}
+            >
+              {decryptedResult.type.startsWith("image/") ? (
+                <img 
+                  src={fileUrl} 
+                  alt="全屏渲染预览" 
+                  referrerPolicy="no-referrer"
+                  className={`max-h-[72vh] sm:max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10 transition-all duration-300 ${
+                    isBlurredFullScreen ? "blur-2xl scale-[1.01]" : "filter-none"
+                  }`}
+                />
+              ) : decryptedResult.type.startsWith("video/") ? (
+                <video 
+                  key={fileUrl}
+                  autoPlay
+                  controls
+                  playsInline
+                  preload="auto"
+                  loop
+                  className={`max-h-[72vh] sm:max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10 transition-all duration-300 ${
+                    isBlurredFullScreen ? "blur-2xl scale-[1.01]" : "filter-none"
+                  }`}
+                >
+                  <source src={fileUrl} type={decryptedResult.type} />
+                  您的浏览器不支持 HTML5 视频播放。
+                </video>
+              ) : decryptedResult.type.startsWith("audio/") ? (
+                <div className="flex flex-col items-center gap-4 bg-slate-900/90 border border-slate-800 p-8 rounded-3xl text-white max-w-sm w-full shadow-2xl">
+                  <Music className="w-12 h-12 text-pink-400 animate-bounce" />
+                  <span className="text-sm font-semibold break-all text-center">{decryptedResult.name}</span>
+                  <audio src={fileUrl} controls className="w-full mt-2" />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 bg-slate-900/90 border border-slate-800 p-8 rounded-3xl text-white max-w-sm w-full shadow-2xl text-center">
+                  <FileText className="w-12 h-12 text-indigo-400" />
+                  <span className="text-sm font-semibold break-all">{decryptedResult.name}</span>
+                  <span className="text-xs text-slate-400">二进制常规文件不支持直接视图预览，已提供常规保存下载</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Bottom Info Panel */}
           <div 
-            className="w-full max-w-xl bg-slate-900/90 border border-slate-800 p-4 sm:p-5 rounded-3xl flex flex-col gap-3 shadow-2xl backdrop-blur-xl z-10" 
+            className="w-full max-w-md bg-slate-900/90 border border-slate-800 p-3 sm:p-4 rounded-2xl flex flex-col gap-1.5 shadow-2xl backdrop-blur-xl z-10" 
             onClick={(e) => e.stopPropagation()}
           >
             {/* Swapped Image / File Info Displayed Here */}
-            <div className="flex flex-col text-left">
-              <span className="text-slate-400 text-[10px] font-mono tracking-wider uppercase">
-                FILE_METADATA // 媒体文件详情
-              </span>
-              <span className="text-white text-sm sm:text-base font-bold truncate mt-1">
-                {decryptedResult.name}
-              </span>
-              <span className="text-xs text-slate-350 font-mono mt-1">
-                MIME: {decryptedResult.type} • {formatSize(decryptedResult.size)}
-              </span>
+            <div className="flex items-start justify-between gap-3 text-left">
+              <div className="min-w-0 flex-1">
+                <span className="text-slate-400 text-[9px] font-mono tracking-wider uppercase block">
+                  FILE_METADATA // 媒体文件详情
+                </span>
+                <span className="text-white text-xs sm:text-sm font-bold truncate block mt-0.5" title={decryptedResult.name}>
+                  {decryptedResult.name}
+                </span>
+              </div>
+              <div className="shrink-0 text-right font-mono text-[10px] text-slate-350 flex flex-col items-end">
+                <span className="font-bold text-indigo-400">{decryptedResult.type}</span>
+                <span>{formatSize(decryptedResult.size)}</span>
+              </div>
             </div>
 
             {/* Visual indicators or labels & description details */}
-            <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono border-t border-slate-800/60 pt-2.5">
-              <span className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${isBlurredFullScreen ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`}></span>
-                <span>滤镜状态: {isBlurredFullScreen ? "已高灵敏模糊屏蔽" : "正常视图"}</span>
+            <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono border-t border-slate-800/50 pt-1.5">
+              <span className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${isBlurredFullScreen ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`}></span>
+                <span>遮罩: {isBlurredFullScreen ? "遮盖" : "原图"}</span>
               </span>
-              {typeof navigator !== "undefined" && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
-                <span className="text-pink-400">长按媒体可呼出系统保存</span>
+              {typeof navigator !== "undefined" && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ? (
+                <span className="text-pink-400/80">长按可呼出系统保存</span>
+              ) : (
+                <span className="text-slate-600">CLIENT_DECRYPTED</span>
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

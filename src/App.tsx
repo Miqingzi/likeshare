@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { 
   ShieldCheck, ShieldAlert, Lock, Unlock, FileCode, Github, HelpCircle, 
   Grid, Globe, Radio, Sparkles, Layers, Cpu, ArrowRightLeft, FileLock2, Info, Settings,
-  ChevronDown, ChevronUp, BookOpen
+  ChevronDown, ChevronUp, BookOpen, Scale
 } from "lucide-react";
 import Encryptor from "./components/Encryptor";
 import Decryptor from "./components/Decryptor";
@@ -17,11 +17,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"decrypt" | "encrypt">("decrypt");
   const [shouldBlur, setShouldBlur] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isOverlayOpen, setIsOverlayOpen] = useState(false);
 
   const [openedMajors, setOpenedMajors] = useState<Record<string, boolean>>({
     protocols: false,
     safety: false,
-    opensource: false
+    opensource: false,
+    disclaimer: false
   });
 
   const [openedMinors, setOpenedMinors] = useState<Record<string, boolean>>({
@@ -30,7 +32,8 @@ export default function App() {
     step3: false,
     step4: false,
     warning: false,
-    githubCode: false
+    githubCode: false,
+    legalText: false
   });
 
   const toggleMajor = (key: string) => {
@@ -60,7 +63,9 @@ export default function App() {
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f080_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f080_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black_70%)] pointer-events-none opacity-40 z-0"></div>
 
       {/* Main Container */}
-      <div className="w-full max-w-5xl mx-auto px-3.5 sm:px-6 relative z-10 flex-grow pt-2 sm:pt-8 animate-fade-in">
+      <div className={`w-full max-w-5xl mx-auto px-3.5 sm:px-6 relative z-10 flex-grow pt-2 sm:pt-8 animate-fade-in transition-all duration-350 ease-in-out ${
+        isOverlayOpen ? "blur-md brightness-75 pointer-events-none scale-[0.985]" : ""
+      }`}>
         
 
 
@@ -94,7 +99,7 @@ export default function App() {
           <div className="relative flex-shrink-0 self-center sm:self-start">
             <button
               type="button"
-              onClick={() => setIsSettingsOpen(!setIsSettingsOpen)}
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               className="py-1 px-2 sm:p-2 text-slate-600 hover:text-pink-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-[11px] sm:text-xs font-semibold border border-slate-200/80 shadow-sm bg-white"
               title="自定义设置"
               id="global-settings-trigger-btn"
@@ -160,7 +165,12 @@ export default function App() {
         <div className="bg-white/70 text-slate-800 rounded-3xl p-4 sm:p-7 shadow-xl border border-white/90 flex flex-col gap-6 relative backdrop-blur-xl animate-fade-in" id="main-content-canvas">
           
           {/* Active component renderer */}
-          {activeTab === "decrypt" && <Decryptor shouldBlur={shouldBlur} />}
+          {activeTab === "decrypt" && (
+            <Decryptor 
+              shouldBlur={shouldBlur} 
+              onFullScreenToggle={(open) => setIsOverlayOpen(open)} 
+            />
+          )}
           {activeTab === "encrypt" && <Encryptor />}
 
         </div>
@@ -395,6 +405,71 @@ export default function App() {
                   {openedMinors.githubCode && (
                     <div className="p-4 border-t border-slate-150/40 bg-white">
                       <GithubCode />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* MAJOR CATEGORY 4: 法律声明 & 免责条款 (Legal & Liability Disclaimer) */}
+          <div className="bg-white/70 backdrop-blur-md border border-slate-200/60 rounded-3xl overflow-hidden shadow-sm transition-all duration-200">
+            <button
+              onClick={() => toggleMajor("disclaimer")}
+              className="w-full flex items-center justify-between p-5 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-700">
+                  <Scale className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">开源公用法律声明</h3>
+                  <p className="text-[10px] text-slate-400">查看关于本公开工具的软件开源公用属性、技术无害及免责条款 (含1个子步骤)</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono font-medium">1项折叠</span>
+                {openedMajors.disclaimer ? (
+                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </div>
+            </button>
+
+            {openedMajors.disclaimer && (
+              <div className="border-t border-slate-100 bg-slate-50/40 p-4 flex flex-col gap-3 animate-fade-in">
+                {/* Minor item 1 */}
+                <div className="bg-white border border-slate-200/50 rounded-2xl overflow-hidden">
+                  <button
+                    onClick={() => toggleMinor("legalText")}
+                    className="w-full flex items-center justify-between p-3.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-650 font-mono font-bold">DISCLAIMER</span>
+                      <span>开源协议限制与无责声明书 (Agreement & Disclaimer)</span>
+                    </div>
+                    {openedMinors.legalText ? (
+                      <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    )}
+                  </button>
+                  {openedMinors.legalText && (
+                    <div className="p-4 border-t border-slate-150/40 bg-slate-50/30 text-[11px] text-slate-500 leading-relaxed flex flex-col gap-3 font-sans">
+                      <div>
+                        <span className="text-slate-800 font-bold block mb-1">一、 公共属性与开源学术宗旨</span>
+                        本工具（「Like混肴」）完全基于标准 MIT / Apache-2.0 开源协议进行公开托管与公用技术分发。核心资产渲染、RGBA 像素重新排布、PBKDF2 基础密钥推导及 AES-GCM 工业级加解密体系均 100% 部署并运行于用户的本地客户端宿主，不涉及任何云端服务器交互、不存储亦不收集任何用户隐私数据。本项目旨在对无插值图像隐写（Steganography）、高复原度媒体转码、跨宿主数据无损容错性进行纯前端学术探讨。
+                      </div>
+                      <div className="border-t border-slate-200 pt-2.5">
+                        <span className="text-slate-800 font-bold block mb-1">二、 行为约束与完全免责声明</span>
+                        本站所提供的所有解密/加密等源代码与应用均为免费、开源、面向公众的工具性服务。由于混淆结果文件的传播渠道与使用场景由分发行为主体独立控制，开发者（或软件著作权利人）在此明确声明：
+                        <ul className="list-disc pl-4 mt-1 flex flex-col gap-1">
+                          <li><b>不对</b> 用户利用本工具对任何受知识产权、商业秘密或相关权益保护的文件进行加密、传输、破解或复原的行为承担任何形式的合规担保、连带赔偿或法律责任。</li>
+                          <li><b>不对</b> 传输链路中由于第三方软件（如社交平台、网络云盘等）有损像素裁剪、色彩饱和压缩、拉伸破坏导致的密文无法解密或解密失真等技术障碍负责。</li>
+                          <li>该软件是“按原样（As Is）”提供的，没有任何形式的保修。在任何情况下，对于因使用或无法使用本软件而产生的任何直接或间接的追偿诉讼或精神索赔，开发者一概免于追责。</li>
+                        </ul>
+                      </div>
                     </div>
                   )}
                 </div>
