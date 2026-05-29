@@ -1,0 +1,6 @@
+{
+  "name": "Like混淆",
+  "description": "超轻量本地多媒体资产像素级混淆与解构防护器，高强度本地安全编码。所有的逻辑与加解密流程在浏览器前端本地进行，100% 拒绝数据外泄。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
