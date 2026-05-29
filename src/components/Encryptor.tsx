@@ -1,37 +1,43 @@
 import React, { useState, useRef, useEffect } from "react";
 import { 
   Upload, FileText, Lock, Eye, EyeOff, Music, Video, Image as ImageIcon,
-  Download, RefreshCw, CheckCircle, Shield, Sparkles, Clipboard, ClipboardCheck, ClipboardPaste
+  Download, RefreshCw, CheckCircle, Shield, Sparkles, Clipboard, ClipboardCheck, 
+  ClipboardPaste, Trash2, FolderArchive, FileCheck, Info
 } from "lucide-react";
 import { encryptAndEncodeToPNG } from "../utils/crypto";
-
-const girlPearlEarringAssetUrl = new URL("../assets/images/girl_pearl_earring_1780013307983.png", import.meta.url).href;
+import JSZip from "jszip";
 
 export default function Encryptor() {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  
-  // Clipboard states
-  const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error" >("idle");
   const [pasteError, setPasteError] = useState("");
 
-  // Encryption state
+  // Encryption states
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [stepMessage, setStepMessage] = useState("");
   const [progressPercent, setProgressPercent] = useState(0);
-  
-  // Output state
-  const [encryptedResult, setEncryptedResult] = useState<{
+
+  // Batch output states
+  interface EncryptedItem {
+    id: string;
+    originalName: string;
+    originalSize: number;
+    mimeType: string;
     dataUrl: string;
     width: number;
     height: number;
     payloadSize: number;
-  } | null>(null);
+    success: boolean;
+    errorMsg?: string;
+  }
+  const [encryptedResults, setEncryptedResults] = useState<EncryptedItem[]>([]);
+  const [activePreviewIndex, setActivePreviewIndex] = useState<number>(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Global listener for Ctrl+V
   useEffect(() => {
     const handleGlobalPaste = async (e: ClipboardEvent) => {
       const target = e.target as HTMLElement;
@@ -55,34 +61,33 @@ export default function Encryptor() {
         return;
       }
 
-      if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
-        const files = e.clipboardData.files;
-        for (let i = 0; i < files.length; i++) {
-          const f = files[i];
-          if (f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/") || f.type.replace(/\s/g, "").startsWith("text/")) {
-            e.preventDefault();
-            setFile(f);
-            return;
-          }
-        }
-      }
+      const inputFiles: File[] = [];
 
-      if (e.clipboardData && e.clipboardData.items) {
+      if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+        const clipboardFiles = e.clipboardData.files;
+        for (let i = 0; i < clipboardFiles.length; i++) {
+          const f = clipboardFiles[i];
+          inputFiles.push(f);
+        }
+      } else if (e.clipboardData && e.clipboardData.items) {
         const items = e.clipboardData.items;
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
           if (item.kind === "file") {
             const blob = item.getAsFile();
             if (blob) {
-              e.preventDefault();
               let ext = item.type.split("/")[1] || "bin";
               if (ext.includes("+") || ext.length > 5) ext = "bin";
-              const fileObj = new File([blob], `pasted_encrypt_file_${Date.now()}.${ext}`, { type: item.type });
-              setFile(fileObj);
-              return;
+              const fileObj = new File([blob], `pasted_file_${Date.now()}_${i}.${ext}`, { type: item.type });
+              inputFiles.push(fileObj);
             }
           }
         }
+      }
+
+      if (inputFiles.length > 0) {
+        e.preventDefault();
+        setFiles((prev) => [...prev, ...inputFiles]);
       }
     };
 
@@ -92,7 +97,7 @@ export default function Encryptor() {
     };
   }, []);
 
-  // File size formatter
+  // Format file size
   const formatSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
@@ -104,13 +109,13 @@ export default function Encryptor() {
   // Determine file icon
   const getFileIcon = (fileType: string) => {
     if (fileType.startsWith("image/")) {
-      return <ImageIcon className="w-16 h-16 text-rose-400" id="file-icon-image" />;
+      return <ImageIcon className="w-8 h-8 text-rose-400" id="file-icon-image" />;
     } else if (fileType.startsWith("audio/")) {
-      return <Music className="w-16 h-16 text-emerald-400" id="file-icon-audio" />;
+      return <Music className="w-8 h-8 text-emerald-400" id="file-icon-audio" />;
     } else if (fileType.startsWith("video/")) {
-      return <Video className="w-16 h-16 text-sky-400" id="file-icon-video" />;
+      return <Video className="w-8 h-8 text-sky-400" id="file-icon-video" />;
     } else {
-      return <FileText className="w-16 h-16 text-amber-400" id="file-icon-generic" />;
+      return <FileText className="w-8 h-8 text-amber-400" id="file-icon-generic" />;
     }
   };
 
@@ -127,18 +132,26 @@ export default function Encryptor() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFiles: File[] = [];
+      for (let i = 0; i < e.dataTransfer.files.length; i++) {
+        droppedFiles.push(e.dataTransfer.files[i]);
+      }
+      setFiles((prev) => [...prev, ...droppedFiles]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles: File[] = [];
+      for (let i = 0; i < e.target.files.length; i++) {
+        selectedFiles.push(e.target.files[i]);
+      }
+      setFiles((prev) => [...prev, ...selectedFiles]);
     }
   };
 
-  // Paste from clipboard helper
+  // Paste from clipboard helper by clicking button
   const handlePasteFromClipboard = async () => {
     try {
       setPasteError("");
@@ -146,6 +159,7 @@ export default function Encryptor() {
         throw new Error("Clipboard read API is not available/supported in this iframe browser sandbox context.");
       }
       const clipboardItems = await navigator.clipboard.read();
+      const pastedFilesList: File[] = [];
       for (const item of clipboardItems) {
         for (const type of item.types) {
           if (type.startsWith("image/") || type.startsWith("video/") || type.startsWith("audio/") || type.startsWith("text/")) {
@@ -153,51 +167,20 @@ export default function Encryptor() {
             let ext = type.split("/")[1] || "bin";
             if (ext.includes("+") || ext.length > 5) ext = "bin";
             const fileObj = new File([blob], `clipboard_file_${Date.now()}.${ext}`, { type });
-            setFile(fileObj);
-            return;
+            pastedFilesList.push(fileObj);
           }
         }
       }
-      setPasteError("剪切板中未找到合适的文件。请复制任意文件或直接在页面上按键盘 Ctrl+V 快捷键进行粘贴。");
-      setTimeout(() => setPasteError(""), 5000);
+      if (pastedFilesList.length > 0) {
+        setFiles((prev) => [...prev, ...pastedFilesList]);
+      } else {
+        setPasteError("剪切板中未找到合适的文件。请复制任意文件或直接在页面上按键盘 Ctrl+V 快捷键进行粘贴。");
+        setTimeout(() => setPasteError(""), 5000);
+      }
     } catch (err: any) {
       console.error("Paste helper caught clipboard permission/execution error:", err);
       setPasteError("💡 浏览器原生剪贴板 API 读取受限。请您直接通过键盘快捷键【Ctrl+V】或【Cmd+V】在任意地方粘贴解析！已为您启用全局事件监听协助极速一键闪电处理。");
       setTimeout(() => setPasteError(""), 10000);
-    }
-  };
-
-  // Copy to clipboard helper
-  const handleCopyToClipboard = async () => {
-    if (!encryptedResult?.dataUrl) return;
-    try {
-      setCopyStatus("idle");
-      if (!navigator.clipboard || !navigator.clipboard.write) {
-        throw new Error("Clipboard write API is not available in this sandbox context.");
-      }
-      const res = await fetch(encryptedResult.dataUrl);
-      const blob = await res.blob();
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          "image/png": blob
-        })
-      ]);
-      setCopyStatus("success");
-      setTimeout(() => setCopyStatus("idle"), 2500);
-    } catch (err: any) {
-      console.warn("Clipboard Image Writing failed, falling back to writing DataURL text:", err);
-      try {
-        if (!navigator.clipboard || !navigator.clipboard.writeText) {
-          throw new Error("writeText API is not available.");
-        }
-        await navigator.clipboard.writeText(encryptedResult.dataUrl);
-        setCopyStatus("success");
-        setTimeout(() => setCopyStatus("idle"), 2500);
-      } catch (e: any) {
-        console.error("Fallback text copy also blocked by browser policy:", e);
-        setCopyStatus("error");
-        setTimeout(() => setCopyStatus("idle"), 4000);
-      }
     }
   };
 
@@ -208,7 +191,7 @@ export default function Encryptor() {
     if (password.length >= 6) score++;
     if (/[a-zA-Z]/.test(password)) score++;
     if (/[0-9]/.test(password)) score++;
-    if (/[^a-zA-Z0-9]/.test(password)) score++;
+    if (/[[^a-zA-Z0-9]/.test(password)) score++;
     
     if (score === 1) return { label: "低强度 (不建议)", score: 25, color: "bg-red-500" };
     if (score === 2) return { label: "中等强度", score: 50, color: "bg-amber-500" };
@@ -218,68 +201,157 @@ export default function Encryptor() {
 
   const strength = getPasswordStrength();
 
-  // Execute encryption
-  const handleEncrypt = async (e: React.FormEvent) => {
+  // Execute batch encryption
+  const handleBatchEncrypt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (files.length === 0) return;
 
     try {
       setIsEncrypting(true);
-      setEncryptedResult(null);
+      setEncryptedResults([]);
       
-      const result = await encryptAndEncodeToPNG(file, password, (msg, percent) => {
-        setStepMessage(msg);
-        setProgressPercent(percent);
-      });
+      const newResults: EncryptedItem[] = [];
+      const totalFiles = files.length;
       
-      setEncryptedResult(result);
+      for (let i = 0; i < totalFiles; i++) {
+        const targetFile = files[i];
+        const filePrefix = `[${i + 1}/${totalFiles}] "${targetFile.name}"`;
+        
+        try {
+          const result = await encryptAndEncodeToPNG(targetFile, password, (msg, percent) => {
+            setStepMessage(`${filePrefix}: ${msg}`);
+            // Calculate a combined progress for smooth transition
+            const combinedPercent = Math.round((i / totalFiles) * 100 + (percent / totalFiles));
+            setProgressPercent(combinedPercent);
+          });
+          
+          newResults.push({
+            id: `enc-${Date.now()}-${i}`,
+            originalName: targetFile.name,
+            originalSize: targetFile.size,
+            mimeType: targetFile.type,
+            dataUrl: result.dataUrl,
+            width: result.width,
+            height: result.height,
+            payloadSize: result.payloadSize,
+            success: true
+          });
+        } catch (fileErrObj: any) {
+          console.error(`Failed to encrypt index ${i}:`, fileErrObj);
+          newResults.push({
+            id: `enc-${Date.now()}-${i}`,
+            originalName: targetFile.name,
+            originalSize: targetFile.size,
+            mimeType: targetFile.type,
+            dataUrl: "",
+            width: 0,
+            height: 0,
+            payloadSize: 0,
+            success: false,
+            errorMsg: fileErrObj?.message || "底层 Canvas 映射或内存容量超载失效"
+          });
+        }
+      }
+      
+      setEncryptedResults(newResults);
+      setActivePreviewIndex(0);
+      setProgressPercent(100);
+      setStepMessage(`批量无损加密已全部处理完成！`);
     } catch (err) {
-      alert("加密出现错误: " + (err as Error).message);
+      alert("批量加密任务运行出现错误: " + (err as Error).message);
     } finally {
       setIsEncrypting(false);
     }
   };
 
-  // Download trigger
-  const handleDownload = async () => {
-    if (!encryptedResult || !file) return;
+  // Download individual item
+  const handleDownloadItem = async (item: EncryptedItem) => {
+    if (!item.success || !item.dataUrl) return;
     try {
-      // Convert Data URL to standard Blob object
-      const response = await fetch(encryptedResult.dataUrl);
+      const response = await fetch(item.dataUrl);
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
       
       const link = document.createElement("a");
-      const originalNameWithoutExt = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
-      link.download = `${originalNameWithoutExt}_secure.png`;
+      const nameWithoutExt = item.originalName.substring(0, item.originalName.lastIndexOf(".")) || item.originalName;
+      link.download = `${nameWithoutExt}_secure.png`;
       link.href = blobUrl;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       
-      // Clean up memory after triggering the browser's download queue
       setTimeout(() => URL.revokeObjectURL(blobUrl), 200);
     } catch (err) {
-      console.warn("Same-origin Blob download failed, attempting native base64 fallback:", err);
+      console.warn("Blob conversion download failed, downloading base64 directly:", err);
       const link = document.createElement("a");
-      const originalNameWithoutExt = file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
-      link.download = `${originalNameWithoutExt}_secure.png`;
-      link.href = encryptedResult.dataUrl;
+      const nameWithoutExt = item.originalName.substring(0, item.originalName.lastIndexOf(".")) || item.originalName;
+      link.download = `${nameWithoutExt}_secure.png`;
+      link.href = item.dataUrl;
       link.click();
     }
   };
 
-  const resetAll = () => {
-    setFile(null);
-    setPassword("");
-    setEncryptedResult(null);
-    setProgressPercent(0);
-    setStepMessage("");
+  // Export all successfully encrypted items as a single ZIP package (一键批量导出)
+  const handleExportAllZip = async () => {
+    const successItems = encryptedResults.filter((r) => r.success);
+    if (successItems.length === 0) return;
+    
+    setStepMessage("正在打包压缩文件中，请稍后...");
+    setIsEncrypting(true);
+    setProgressPercent(40);
+
+    try {
+      const zip = new JSZip();
+      
+      for (let i = 0; i < successItems.length; i++) {
+        const item = successItems[i];
+        const base64Content = item.dataUrl.split(",")[1];
+        const originalNameWithoutExt = item.originalName.substring(0, item.originalName.lastIndexOf(".")) || item.originalName;
+        const filename = `${originalNameWithoutExt}_secure.png`;
+        
+        zip.file(filename, base64Content, { base64: true });
+        setProgressPercent(40 + Math.round((i / successItems.length) * 50));
+      }
+      
+      const contentBlob = await zip.generateAsync({ type: "blob" });
+      const blobUrl = URL.createObjectURL(contentBlob);
+      
+      const link = document.createElement("a");
+      link.download = `like_confused_encrypted_pkg_${Date.now()}.zip`;
+      link.href = blobUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (zipErr) {
+      console.error("ZIP creation failed:", zipErr);
+      alert("批量打包输出 ZIP 失败，请使用单张下载功能。");
+    } finally {
+      setIsEncrypting(false);
+      setProgressPercent(100);
+      setStepMessage("");
+    }
   };
 
+  const removeFileAt = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const resetAll = () => {
+    setFiles([]);
+    setPassword("");
+    setEncryptedResults([]);
+    setProgressPercent(0);
+    setStepMessage("");
+    setActivePreviewIndex(0);
+  };
+
+  const activeEncryptedItem = encryptedResults[activePreviewIndex];
+
   return (
-    <div className="w-full flex flex-col gap-6" id="encryptor-module">
-      {/* Step Info */}
+    <div className="w-full flex flex-col gap-6 animate-fade-in" id="encryptor-module">
+      {/* Module Banner Title */}
       <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
         <span className="relative flex h-3 w-3 sm:hidden">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
@@ -288,100 +360,122 @@ export default function Encryptor() {
         <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 hidden sm:block">
           <Shield className="w-5 h-5" />
         </div>
-        <div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-950 font-display leading-tight">加密：将敏捷资产转化为高强度像素图</h2>
+        <div className="flex-1">
+          <h2 className="text-base sm:text-lg font-bold text-slate-950 font-display leading-tight">批量加密：媒体载荷离线像素隐写安全箱</h2>
+          <p className="text-[11px] text-slate-400 mt-0.5 sm:block hidden">支持单文件或多文件合并批处理，全本地沙盒运算保护密文，杜绝任何云端上载泄露风险</p>
         </div>
       </div>
 
-      {!encryptedResult ? (
-        <form onSubmit={handleEncrypt} className="flex flex-col gap-6">
-          {/* File Selector */}
+      {encryptedResults.length === 0 ? (
+        <form onSubmit={handleBatchEncrypt} className="flex flex-col gap-5">
+          {/* Main Upload Dropzone area with multi-file support */}
           <div className="flex flex-col gap-2">
-            <span className="text-xs sm:text-sm font-semibold text-slate-700">选择待加密媒体文件 (支持图片、音画、机密包)</span>
-            {!file ? (
-              <div className="flex flex-col gap-2 w-full">
-                <div
-                  id="dropzone"
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`border border-dashed rounded-2xl p-6 sm:p-12 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
-                    isDragOver
-                      ? "border-indigo-500 bg-indigo-50/40 shadow-[0_0_20px_rgba(99,102,241,0.1)] scale-[0.99]"
-                      : "border-slate-200 hover:border-indigo-400 hover:bg-slate-50/40"
-                  }`}
-                >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    className="hidden"
-                    accept="image/*,audio/*,video/*"
-                  />
-                  <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3 transition-transform duration-300 hover:scale-105">
-                    <Upload className="w-6 h-6 animate-pulse" />
-                  </div>
-                  <p className="text-xs sm:text-sm font-bold text-slate-900 text-center">拖拽文件到这里，或点击浏览本地文件</p>
-                  <p className="text-[10px] sm:text-xs text-slate-400 mt-2 text-center max-w-md leading-normal">
-                    支持 JPG/PNG/GIF 画作、MP3/WAV 录音、MP4/MKV 视频（最大支持 ~100MB 极速吞吐）
-                  </p>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePasteFromClipboard();
-                    }}
-                    className="mt-4 px-4 py-2 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm border border-indigo-200/40"
-                  >
-                    <ClipboardPaste className="w-3.5 h-3.5" />
-                    读取剪贴板快捷导入
-                  </button>
-                </div>
-                {pasteError && (
-                  <span className="text-[11px] text-rose-500 font-semibold text-center block animate-fade-in animate-pulse">
-                    ⚠️ {pasteError}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center justify-between p-3.5 border border-slate-200/60 bg-slate-50/60 backdrop-blur-md rounded-2xl relative overflow-hidden group">
-                <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
-                <div className="flex items-center gap-3 pl-1 min-w-0 flex-1">
-                  <div className="flex-shrink-0">
-                    {getFileIcon(file.type)}
-                  </div>
-                  <div className="flex flex-col min-w-0 flex-1">
-                    <span className="text-xs sm:text-sm font-bold text-slate-900 truncate pr-4" title={file.name}>
-                      {file.name}
-                    </span>
-                    <span className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
-                      <span>{formatSize(file.size)}</span>
-                      <span>•</span>
-                      <span className="truncate">{file.type || "二进制介质"}</span>
-                    </span>
-                  </div>
-                </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs sm:text-sm font-semibold text-slate-700">步骤 1：导入需要附带隐写的文件 (批处理模式)</span>
+              {files.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setFile(null)}
-                  disabled={isEncrypting}
-                  className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-rose-50 transition-colors mr-1 cursor-pointer disabled:opacity-40 flex-shrink-0"
-                  id="cancel-file-btn"
+                  onClick={() => setFiles([])}
+                  className="text-[11px] text-rose-500 hover:text-rose-600 font-bold flex items-center gap-1 cursor-pointer"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" />
+                  清空列表 ({files.length}个文件)
                 </button>
+              )}
+            </div>
+
+            <div
+              id="dropzone"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border border-dashed rounded-2xl p-5 sm:p-10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
+                isDragOver
+                  ? "border-indigo-500 bg-indigo-50/40 shadow-[0_0_20px_rgba(99,102,241,0.1)] scale-[0.99]"
+                  : "border-slate-200 hover:border-indigo-400 hover:bg-slate-5/40"
+              }`}
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept="image/*,audio/*,video/*,text/*,application/*"
+                multiple
+              />
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-2.5 transition-transform duration-300 hover:scale-105">
+                <Upload className="w-6 h-6 animate-pulse" />
               </div>
+              <p className="text-xs sm:text-sm font-bold text-slate-900 text-center">拖动单个/多个文件到这里，或点击浏览本地文件</p>
+              <p className="text-[10px] sm:text-xs text-slate-400 mt-1.5 text-center max-w-lg leading-normal">
+                支持各类画图(JPG/PNG/GIF)、音频(MP3/WAV/AAC)、录像(MP4/MKV)和本地包文，可在单幅离线画纸完成高达 10-150MB 无损混淆
+              </p>
+              
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePasteFromClipboard();
+                }}
+                className="mt-3.5 px-3.5 py-1.5 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm border border-indigo-200/40"
+              >
+                <ClipboardPaste className="w-3.5 h-3.5" />
+                读取剪贴板快捷导入
+              </button>
+            </div>
+            
+            {pasteError && (
+              <span className="text-[11px] text-rose-500 font-semibold text-center block animate-fade-in animate-pulse">
+                ⚠️ {pasteError}
+              </span>
             )}
           </div>
 
-          {/* Password Input & Strength */}
-          {file && (
-            <div className="flex flex-col gap-4 bg-slate-50/50 p-4 sm:p-5 rounded-2xl border border-slate-200/40">
+          {/* Render File List visually when files are ready */}
+          {files.length > 0 && (
+            <div className="bg-slate-50/50 border border-slate-200/40 rounded-2xl p-4 flex flex-col gap-2.5 max-h-[220px] overflow-y-auto">
+              <span className="text-[11px] uppercase font-bold text-slate-400 font-mono tracking-wider">已导入待混淆队列 ({files.length}) :</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {files.map((f, index) => (
+                  <div 
+                    key={`${f.name}-${index}`} 
+                    className="flex items-center justify-between p-2.5 bg-white border border-slate-150 rounded-xl relative overflow-hidden group hover:border-indigo-300 transition-all duration-200"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="flex-shrink-0 p-1 bg-slate-50 rounded-lg">
+                        {getFileIcon(f.type)}
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-xs font-bold text-slate-800 truncate" title={f.name}>
+                          {f.name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          {formatSize(f.size)} • {f.type || "二进制或文本媒介"}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFileAt(index)}
+                      className="p-1 text-slate-400 hover:text-red-500 hover:bg-rose-50 rounded-lg transition-all ml-1 flex-shrink-0"
+                      title="移除此资产"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Password Setup Configuration */}
+          {files.length > 0 && (
+            <div className="flex flex-col gap-3.5 bg-slate-50/50 p-4 sm:p-5 rounded-2xl border border-slate-200/40">
               <div className="flex flex-col gap-2">
                 <label className="text-xs sm:text-sm font-semibold text-slate-800 flex items-center justify-between">
-                  <span>设定解密密码 (可选，不设密码则仅做本地混淆)</span>
-                  <span className="text-[10px] sm:text-xs font-normal text-slate-400">解密时若不设密码也将不提示输入</span>
+                  <span>步骤 2：设定解密口令 (批处理公用)</span>
+                  <span className="text-[10px] sm:text-xs font-normal text-slate-400">留空则为通用免密。所有文件将应用此统一密钥</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
@@ -392,26 +486,24 @@ export default function Encryptor() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isEncrypting}
-                    placeholder="[可选] 请输入安全/混淆密码。不设密码可直接开启混淆"
+                    placeholder="[可选密码] 输入相同的解密密码，保障机密完整隔离"
                     className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-base md:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 text-slate-900 font-mono transition-shadow duration-200"
-                    id="encrypt-password-input"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-                    id="toggle-encrypt-pwd-btn"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
-              {/* Password Strength Indicator */}
+              {/* Password Strength display */}
               {password && (
                 <div className="flex flex-col gap-1.5 animate-fade-in">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500 font-medium">密钥防暴力破解系数:</span>
+                    <span className="text-slate-500 font-medium font-sans">密码抗爆破强度评估:</span>
                     <span className={`font-bold font-mono ${
                       strength.score <= 25 ? "text-red-500" :
                       strength.score <= 50 ? "text-amber-500" :
@@ -431,17 +523,17 @@ export default function Encryptor() {
             </div>
           )}
 
-          {/* Action Trigger / Progress */}
-          {file && (
+          {/* Submit Triggers */}
+          {files.length > 0 && (
             <div className="flex flex-col gap-3">
               {isEncrypting && (
-                <div className="flex flex-col gap-2.5 border border-indigo-100 bg-indigo-50/20 p-4 rounded-2xl animate-fade-in">
+                <div className="flex flex-col gap-2.5 border border-indigo-100 bg-indigo-50/20 p-4 rounded-2xl animate-fade-in mb-1">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-indigo-600 font-semibold flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 animate-spin text-indigo-500" />
-                      {stepMessage}
+                    <span className="text-indigo-600 font-semibold flex items-center gap-1.5 max-w-[85%] truncate">
+                      <Sparkles className="w-3.5 h-3.5 animate-spin text-indigo-500 flex-shrink-0" />
+                      <span>{stepMessage}</span>
                     </span>
-                    <span className="text-indigo-600 font-mono font-bold">{progressPercent}%</span>
+                    <span className="text-indigo-600 font-mono font-bold flex-shrink-0">{progressPercent}%</span>
                   </div>
                   <div className="h-2 w-full bg-indigo-150/40 rounded-full overflow-hidden relative">
                     <div 
@@ -455,125 +547,190 @@ export default function Encryptor() {
               {!isEncrypting && (
                 <button
                   type="submit"
-                  className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-lg shadow-indigo-100/60 cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
-                  id="start-encrypt-btn"
+                  className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-lg shadow-indigo-100/60 cursor-pointer transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-1.5"
                 >
-                  本地像素混淆编码 (Encrypt)
+                  <Shield className="w-4 h-4" />
+                  <span>开始批量无损加密 ({files.length} 个本地文件)</span>
                 </button>
               )}
             </div>
           )}
         </form>
       ) : (
-        /* SUCCESS RESULTS VIEW WITH TOP COMPACT ACTIONS BAR */
+        /* METRICS AND BATCH RESULT PREVIEWER */
         <div className="flex flex-col gap-4 animate-fade-in" id="encrypt-result-node">
-          {/* Top Actions Pill Bar */}
-          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap justify-start border-b border-dashed border-slate-100 pb-2.5" id="encrypt-top-actions">
-            <button
-              onClick={handleDownload}
-              className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 flex items-center gap-1 cursor-pointer transition-colors"
-              id="top-download-btn-enc"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>下载画纸</span>
-            </button>
-            {/* Clipboard image-copy is disabled to prevent OS re-compression from stripping fine pixel metadata */}
-            <button
-              disabled={true}
-              type="button"
-              className="py-1.5 px-3 bg-slate-50 text-slate-400 border border-slate-200/50 rounded-xl text-xs font-bold flex items-center gap-1 cursor-not-allowed select-none relative group"
-            >
-              <Clipboard className="w-3.5 h-3.5" />
-              <span>无法复制 (防压缩损坏)</span>
-              
-              {/* Tooltip explanation */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-900 border border-slate-800 text-white text-[11px] rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-30 font-sans leading-normal">
-                <p className="font-bold text-rose-300 mb-1 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                  为什么禁用复制图片？
-                </p>
-                浏览器和操作系统剪贴板在复制真实“图像”时会强制执行有损重合和元数据剥离，导致无损隐写载荷彻底失效损坏。请务必使用左侧的 <b>「下载画纸」</b> 保存完全无损的原 PNG 格式！
-              </div>
-            </button>
-            <button
-              onClick={resetAll}
-              className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-              id="top-reset-btn-enc"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>继续加密</span>
-            </button>
+          {/* Output Control bar */}
+          <div className="flex items-center justify-between border-b border-dashed border-slate-100 pb-3 flex-wrap gap-2 mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl font-bold flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5" />
+                <span>一键加密完成 ({encryptedResults.filter(r => r.success).length} / {encryptedResults.length})</span>
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportAllZip}
+                disabled={isEncrypting || encryptedResults.filter(r => r.success).length === 0}
+                className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer flex items-center gap-1.5 transition-colors"
+              >
+                <FolderArchive className="w-3.5 h-3.5" />
+                <span>一键打包导出全部 (ZIP)</span>
+              </button>
+              <button
+                onClick={resetAll}
+                disabled={isEncrypting}
+                className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>继续加密</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-6 items-stretch">
-            {/* Visual Encrypted PNG Block Canvas Wrapper in Neo-Tech Frame */}
-            <div className="flex-1 flex flex-col justify-center items-center p-5 bg-[#0d0f12] border border-slate-900/50 rounded-2xl relative overflow-hidden min-h-[280px]">
-              {/* Retro Sci-fi Tech Bounds */}
-              <div className="absolute top-3 left-3 text-[9px] text-slate-500 font-mono select-none flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping"></span>
-                <span>RENDER_ENGINE: PNG_CANVAS</span>
-              </div>
-              <div className="absolute bottom-3 right-3 text-[9px] text-indigo-400 font-mono bg-slate-900/80 px-2.5 py-1 rounded-md border border-slate-800 select-none">
-                AES-255-GCM
-              </div>
-              
-              {/* Visual Encrypted image pixel box - using the real encrypted result to enable mobile long-press save */}
-              <div className="relative group max-w-full my-4">
-                <div className="absolute -inset-2 bg-indigo-500/10 rounded-xl blur-lg opacity-80 group-hover:opacity-100 transition duration-300"></div>
-                <img
-                  src={encryptedResult.dataUrl}
-                  alt="加密生成图"
-                  referrerPolicy="no-referrer"
-                  className="relative rounded-lg shadow-2xl border border-slate-800 max-h-[220px] object-contain rendering-pixelated cursor-pointer select-text pointer-events-auto"
-                  style={{ imageRendering: "pixelated" }}
-                />
-              </div>
-              
-              {/* Description */}
-              <p className="text-slate-400 font-mono text-[10px] sm:text-xs mt-3 flex items-center gap-1 py-1 px-3 rounded-full bg-slate-900/60 border border-slate-800/80 select-none">
-                画纸分辨率: <span className="text-white font-bold">{encryptedResult.width} × {encryptedResult.height}</span> 像素
-              </p>
+          {/* Loader state in result screen if ZIP packaging is running */}
+          {isEncrypting && (
+            <div className="w-full bg-indigo-50/30 border border-indigo-100 p-3.5 rounded-2xl text-xs text-indigo-700 font-semibold animate-pulse flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 animate-spin text-indigo-500" />
+                {stepMessage}
+              </span>
+              <span>{progressPercent}%</span>
+            </div>
+          )}
 
-              {/* Mobile instruction prompt */}
-              {typeof navigator !== "undefined" && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && (
-                <p className="text-pink-400 font-normal text-[11px] mt-3.5 text-center leading-relaxed max-w-[280px] bg-pink-500/10 border border-pink-500/20 px-3 py-2 rounded-xl animate-pulse">
-                  💡 <b>移动端无损保存提示：</b> 若点击下载无响应，可直接<b>「长按上方画纸」</b>呼出系统菜单，选择 <b>「保存图片 / 添加至照片」</b> 即可完美储存在本地相册！
-                </p>
-              )}
+          {/* Grid setup mimicking "Switchable Preview" (切换预览) */}
+          <div className="flex flex-col lg:flex-row gap-5 items-stretch">
+            {/* Left Queue selection lists */}
+            <div className="w-full lg:w-[350px] flex flex-col gap-2 flex-shrink-0">
+              <span className="text-[11px] font-bold text-slate-400 font-mono tracking-wider">切换进行独立查看或单张保存 ({encryptedResults.length}):</span>
+              <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto max-h-[360px] pb-2 lg:pb-0 scrollbar-thin">
+                {encryptedResults.map((item, idx) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActivePreviewIndex(idx)}
+                    className={`flex items-center gap-3 p-3 text-left border rounded-xl transition-all flex-shrink-0 lg:flex-shrink w-[240px] lg:w-full cursor-pointer relative ${
+                      activePreviewIndex === idx
+                        ? "border-indigo-500 bg-indigo-50/40 shadow-sm"
+                        : "border-slate-150 hover:border-slate-300 bg-white"
+                    }`}
+                  >
+                    <div className="p-1 rounded-lg bg-slate-50 flex-shrink-0">
+                      {getFileIcon(item.mimeType)}
+                    </div>
+                    
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-xs font-bold text-slate-900 truncate pr-5" title={item.originalName}>
+                        {item.originalName}
+                      </span>
+                      {item.success ? (
+                        <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                          密图尺寸: {item.width} × {item.height}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-rose-500 mt-0.5 font-medium">
+                          ❌ 加密失败: 超载或异常
+                        </span>
+                      )}
+                    </div>
+                    {item.success && (
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all" onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownloadItem(item);
+                      }} title="立即保存此份">
+                        <Download className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Actions & Insights */}
-            <div className="flex-1 flex flex-col justify-start gap-4 self-stretch">
-              <div className="flex flex-col gap-3">
-                {/* Simplified compact success banner to save space */}
-                <div className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl flex items-center gap-2.5">
-                  <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                  <div className="flex flex-row items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-bold text-slate-950 font-display leading-none">本地像素加密顺利完成！</span>
-                    <span className="text-[10px] text-slate-500 leading-none">密码经 PBKDF2 安全加固与像素打散。</span>
-                  </div>
-                </div>
+            {/* Right main dynamic display */}
+            <div className="flex-1 bg-slate-50/30 border border-slate-150 rounded-2xl p-4 sm:p-5 flex flex-col justify-between self-stretch min-h-[380px]">
+              {activeEncryptedItem && activeEncryptedItem.success ? (
+                <div className="flex flex-col md:flex-row gap-5 items-stretch h-full">
+                  {/* Image render node */}
+                  <div className="flex-1 flex flex-col justify-center items-center p-4 bg-[#090b0d] border border-slate-900/60 rounded-xl relative overflow-hidden min-h-[220px]">
+                    <div className="absolute top-2.5 left-2.5 text-[8px] text-slate-500 font-mono flex items-center gap-1 select-none">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>已混淆像素安全纸层</span>
+                    </div>
 
-                {/* Encrypted Details Cards */}
-                <div className="grid grid-cols-2 gap-2.5 font-mono text-[11px] text-slate-600">
-                  <div className="p-3 bg-slate-50/60 border border-slate-200/50 rounded-xl flex flex-col gap-1">
-                    <span className="text-[10px] text-slate-400">原始文件</span>
-                    <span className="font-bold text-slate-800 truncate" title={file?.name}>{file?.name}</span>
+                    <div className="absolute bottom-2.5 right-2.5 text-[8px] text-indigo-400 font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                      AES-255-GCM
+                    </div>
+
+                    <img
+                      src={activeEncryptedItem.dataUrl}
+                      alt="加密生成图"
+                      referrerPolicy="no-referrer"
+                      className="max-h-[190px] w-auto object-contain cursor-pointer select-text pointer-events-auto"
+                      style={{ imageRendering: "pixelated" }}
+                    />
+
+                    <p className="text-[10px] text-slate-500 mt-3 font-mono">
+                      画底分辨率: <span className="text-slate-300 font-bold">{activeEncryptedItem.width} × {activeEncryptedItem.height}</span> 像素
+                    </p>
                   </div>
-                  <div className="p-3 bg-slate-50/60 border border-slate-200/50 rounded-xl flex flex-col gap-1">
-                    <span className="text-[10px] text-slate-400">输出类型</span>
-                    <span className="font-bold text-indigo-600">Secure PNG</span>
-                  </div>
-                  <div className="p-3 bg-slate-50/60 border border-slate-200/50 rounded-xl flex flex-col gap-1">
-                    <span className="text-[10px] text-slate-400">载荷长度</span>
-                    <span className="font-bold text-slate-800">{formatSize(encryptedResult.payloadSize)}</span>
-                  </div>
-                  <div className="p-3 bg-slate-50/60 border border-slate-200/50 rounded-xl flex flex-col gap-1">
-                    <span className="text-[10px] text-slate-400">加密像素数</span>
-                    <span className="font-bold text-emerald-600">{(encryptedResult.width * encryptedResult.height).toLocaleString()} Px</span>
+
+                  {/* Info details and guides */}
+                  <div className="w-full md:w-[240px] flex flex-col justify-between flex-shrink-0 gap-3 text-xs">
+                    <div className="flex flex-col gap-2.5">
+                      <div className="bg-indigo-50/50 p-2.5 border border-indigo-100 rounded-lg">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide block">源文件名</span>
+                        <span className="font-bold text-slate-800 truncate block mt-0.5" title={activeEncryptedItem.originalName}>
+                          {activeEncryptedItem.originalName}
+                        </span>
+                      </div>
+
+                      <div className="bg-indigo-50/50 p-2.5 border border-indigo-100 rounded-lg">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide block">原始大小 / 载荷量</span>
+                        <span className="font-bold text-slate-800 block mt-0.5">
+                          {formatSize(activeEncryptedItem.originalSize)} / {formatSize(activeEncryptedItem.payloadSize)}
+                        </span>
+                      </div>
+
+                      <div className="bg-indigo-50/50 p-2.5 border border-indigo-100 rounded-lg">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide block">最终格式质地</span>
+                        <span className="font-bold text-emerald-600 block mt-0.5">
+                          24-Bit 无损像素 PNG
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => handleDownloadItem(activeEncryptedItem)}
+                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all text-xs"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        下载此张无损画纸
+                      </button>
+
+                      {/* Info on mobile long press and disable manual clip */}
+                      <p className="text-[10px] text-slate-400 bg-slate-50 border border-slate-100 p-2.5 rounded-lg leading-relaxed font-sans">
+                        💡 <b>提示：</b>操作系统剪贴板原生复制时将对图片进行<b>有损降位压缩</b>，因此禁用一键复制。请使用单纸下载或直接一键打包 ZIP。移动端可通过<b>「长按左侧画纸」</b>保存保存至相册！
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : activeEncryptedItem ? (
+                <div className="flex flex-col items-center justify-center h-full text-center py-10">
+                  <span className="p-3 bg-rose-50 text-rose-500 rounded-2xl mb-3">
+                    <Info className="w-6 h-6 animate-pulse" />
+                  </span>
+                  <span className="text-sm font-bold text-slate-800">该文件发生错误，混淆未通过</span>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm leading-normal">
+                    异常原因：{activeEncryptedItem.errorMsg || "此媒体由于格式异常、内存溢出或像素超限，无法顺利嵌入隐写质地。"}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
+                  <span>请从左侧列表选择一份文件预览其还原像素密图</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
