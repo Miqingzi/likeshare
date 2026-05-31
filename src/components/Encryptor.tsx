@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect } from "react";
 import { 
   Upload, FileText, Lock, Eye, EyeOff, Music, Video, Image as ImageIcon,
   Download, RefreshCw, CheckCircle, Shield, Sparkles, Clipboard, ClipboardCheck, 
-  ClipboardPaste, Trash2, FolderArchive, FileCheck, Info
+  ClipboardPaste, Trash2, FolderArchive, FileCheck, Info, Film, Sliders, Volume2, Settings
 } from "lucide-react";
-import { encryptAndEncodeToPNG } from "../utils/crypto";
+import { encryptAndEncodeToPNG, encryptAndEncodeToDuckPNG, scrambleImage } from "../utils/crypto";
 import JSZip from "jszip";
 
 export default function Encryptor() {
@@ -13,6 +13,9 @@ export default function Encryptor() {
   const [showPassword, setShowPassword] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [pasteError, setPasteError] = useState("");
+
+  const [stegMode, setStegMode] = useState<"like" | "duck" | "scramble">("like");
+  const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">("idle");
 
   // Encryption states
   const [isEncrypting, setIsEncrypting] = useState(false);
@@ -218,18 +221,30 @@ export default function Encryptor() {
         const filePrefix = `[${i + 1}/${totalFiles}] "${targetFile.name}"`;
         
         try {
-          const result = await encryptAndEncodeToPNG(targetFile, password, (msg, percent) => {
-            setStepMessage(`${filePrefix}: ${msg}`);
-            // Calculate a combined progress for smooth transition
-            const combinedPercent = Math.round((i / totalFiles) * 100 + (percent / totalFiles));
-            setProgressPercent(combinedPercent);
-          });
+          let result;
+          if (stegMode === "scramble") {
+            if (!targetFile.type.startsWith("image/") && !targetFile.name.match(/\.(png|jpe?g|webp|bmp|gif)$/i)) {
+              throw new Error("Like分块置乱仅支持图片格式文件(如 PNG / JPG / BMP)！");
+            }
+            result = await scrambleImage(targetFile, (msg, percent) => {
+              setStepMessage(`${filePrefix}: ${msg}`);
+              const combinedPercent = Math.round((i / totalFiles) * 100 + (percent / totalFiles));
+              setProgressPercent(combinedPercent);
+            });
+          } else {
+            const encryptFunc = stegMode === "duck" ? encryptAndEncodeToDuckPNG : encryptAndEncodeToPNG;
+            result = await encryptFunc(targetFile, password, (msg, percent) => {
+              setStepMessage(`${filePrefix}: ${msg}`);
+              const combinedPercent = Math.round((i / totalFiles) * 100 + (percent / totalFiles));
+              setProgressPercent(combinedPercent);
+            });
+          }
           
           newResults.push({
             id: `enc-${Date.now()}-${i}`,
             originalName: targetFile.name,
             originalSize: targetFile.size,
-            mimeType: targetFile.type,
+            mimeType: stegMode === "scramble" ? "image/scramble" : targetFile.type,
             dataUrl: result.dataUrl,
             width: result.width,
             height: result.height,
@@ -257,10 +272,28 @@ export default function Encryptor() {
       setActivePreviewIndex(0);
       setProgressPercent(100);
       setStepMessage(`批量无损加密已全部处理完成！`);
-    } catch (err) {
+    } catch (err: any) {
       alert("批量加密任务运行出现错误: " + (err as Error).message);
     } finally {
       setIsEncrypting(false);
+    }
+  };
+
+  const handleCopyImageToClipboard = async (item: EncryptedItem) => {
+    if (!item.success || !item.dataUrl) return;
+    try {
+      setCopyStatus("idle");
+      const r = await fetch(item.dataUrl);
+      const blob = await r.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob })
+      ]);
+      setCopyStatus("success");
+      setTimeout(() => setCopyStatus("idle"), 2500);
+    } catch (err) {
+      console.error("Unable to copy image to clipboard:", err);
+      setCopyStatus("error");
+      setTimeout(() => setCopyStatus("idle"), 3500);
     }
   };
 
@@ -331,6 +364,37 @@ export default function Encryptor() {
       setIsEncrypting(false);
       setProgressPercent(100);
       setStepMessage("");
+    }
+  };
+
+  const handleExportAllPNG = async () => {
+    const successItems = encryptedResults.filter((r) => r.success);
+    if (successItems.length === 0) return;
+    
+    for (let i = 0; i < successItems.length; i++) {
+        const item = successItems[i];
+        try {
+          const response = await fetch(item.dataUrl);
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          
+          const link = document.createElement("a");
+          const nameWithoutExt = item.originalName.substring(0, item.originalName.lastIndexOf(".")) || item.originalName;
+          link.download = `${nameWithoutExt}_secure.png`;
+          link.href = blobUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 200);
+        } catch (err) {
+          const link = document.createElement("a");
+          const nameWithoutExt = item.originalName.substring(0, item.originalName.lastIndexOf(".")) || item.originalName;
+          link.download = `${nameWithoutExt}_secure.png`;
+          link.href = item.dataUrl;
+          link.click();
+        }
+        await new Promise(r => setTimeout(r, 150));
     }
   };
 
@@ -471,11 +535,13 @@ export default function Encryptor() {
 
           {/* Password Setup Configuration */}
           {files.length > 0 && (
-            <div className="flex flex-col gap-3.5 bg-slate-50/50 p-4 sm:p-5 rounded-2xl border border-slate-200/40">
+            <div className={`flex flex-col gap-3.5 bg-slate-50/50 p-4 sm:p-5 rounded-2xl border border-slate-200/40 transition-opacity ${stegMode === "scramble" ? "opacity-50" : ""}`}>
               <div className="flex flex-col gap-2">
                 <label className="text-xs sm:text-sm font-semibold text-slate-800 flex items-center justify-between">
                   <span>步骤 2：设定解密口令 (批处理公用)</span>
-                  <span className="text-[10px] sm:text-xs font-normal text-slate-400">留空则为通用免密。所有文件将应用此统一密钥</span>
+                  <span className="text-[10px] sm:text-xs font-normal text-slate-400">
+                    {stegMode === "scramble" ? "分块重组不支持密码加密" : "留空则为通用免密。所有文件将应用此统一密钥"}
+                  </span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
@@ -485,14 +551,15 @@ export default function Encryptor() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    disabled={isEncrypting}
-                    placeholder="[可选密码] 输入相同的解密密码，保障机密完整隔离"
-                    className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-base md:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 text-slate-900 font-mono transition-shadow duration-200"
+                    disabled={isEncrypting || stegMode === "scramble"}
+                    placeholder={stegMode === "scramble" ? "Like-Scramble分块重组无需密码" : "[可选密码] 输入相同的解密密码，保障机密完整隔离"}
+                    className={`w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 text-slate-900 font-mono transition-shadow duration-200 ${stegMode === "scramble" ? "bg-slate-100 text-slate-400" : "bg-white"}`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                    disabled={stegMode === "scramble"}
+                    className={`absolute right-3.5 top-1/2 -translate-y-1/2 cursor-pointer p-0.5 ${stegMode === "scramble" ? "text-slate-300" : "text-slate-400 hover:text-slate-600"}`}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -520,6 +587,96 @@ export default function Encryptor() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Output Steganography Option Selector (Step 3) */}
+          {files.length > 0 && (
+            <div className="flex flex-col gap-4 bg-indigo-50/10 p-4 sm:p-5 rounded-2xl border border-indigo-100/60 shadow-sm animate-fade-in" id="comfy-node-widget">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-indigo-950 border-b border-indigo-100/40 pb-2">
+                <Settings className="w-4 h-4 text-indigo-500" />
+                <span>步骤 3：选择封装输出物理材质 / 隐写图方向</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mt-1">
+                {/* Option 1: Like Confused PNG */}
+                <div
+                  onClick={() => setStegMode("like")}
+                  className={`flex flex-col gap-2 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 select-none ${
+                    stegMode === "like"
+                      ? "bg-indigo-500/5 border-indigo-500 shadow-sm animate-fade-in"
+                      : "bg-white/80 border-slate-200/80 hover:bg-slate-50 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`font-bold text-xs sm:text-sm ${stegMode === "like" ? "text-indigo-600" : "text-slate-800"}`}>
+                      🌸 Like混淆 (Standard LSB)
+                    </span>
+                    <input
+                      type="radio"
+                      name="stegMode"
+                      checked={stegMode === "like"}
+                      onChange={() => setStegMode("like")}
+                      className="w-3.5 h-3.5 accent-indigo-600 cursor-pointer"
+                    />
+                  </div>
+                  <p className="text-[10px] sm:text-xs text-slate-500 leading-relaxed font-sans">
+                    标准 CSPNG100 结构混淆，将加密流混合于《戴珍珠耳环的少女》底纸，格式与主流解密端保持一贯契合。
+                  </p>
+                </div>
+
+                {/* Option 2: Duck LSB Steganography */}
+                <div
+                  onClick={() => setStegMode("duck")}
+                  className={`flex flex-col gap-2 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 select-none ${
+                    stegMode === "duck"
+                      ? "bg-emerald-500/5 border-emerald-500 shadow-sm animate-fade-in"
+                      : "bg-white/80 border-slate-200/80 hover:bg-slate-50 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`font-bold text-xs sm:text-sm ${stegMode === "duck" ? "text-emerald-600" : "text-slate-800"}`}>
+                      🦆 Duck隐写 (Yaya Steg)
+                    </span>
+                    <input
+                      type="radio"
+                      name="stegMode"
+                      checked={stegMode === "duck"}
+                      onChange={() => setStegMode("duck")}
+                      className="w-3.5 h-3.5 accent-emerald-600 cursor-pointer"
+                    />
+                  </div>
+                  <p className="text-[10px] sm:text-xs text-slate-500 leading-relaxed font-sans">
+                    兼容 SS_tools 经典 Yaya 隐写格式。自动进行自对齐比特无损嵌入，具有极佳的视觉隐蔽度及恢复稳定性。
+                  </p>
+                </div>
+
+                {/* Option 3: Like Block Scramble (For Images Only) */}
+                <div
+                  onClick={() => setStegMode("scramble")}
+                  className={`flex flex-col gap-2 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 select-none ${
+                    stegMode === "scramble"
+                      ? "bg-amber-500/5 border-amber-500 shadow-sm animate-fade-in"
+                      : "bg-white/80 border-slate-200/80 hover:bg-slate-50 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`font-bold text-xs sm:text-sm ${stegMode === "scramble" ? "text-amber-600" : "text-slate-800"}`}>
+                      🧩 Like-Scramble (分块重组)
+                    </span>
+                    <input
+                      type="radio"
+                      name="stegMode"
+                      checked={stegMode === "scramble"}
+                      onChange={() => setStegMode("scramble")}
+                      className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                    />
+                  </div>
+                  <p className="text-[10px] sm:text-xs text-slate-500 leading-relaxed font-sans">
+                    (仅限图片) 大番茄像素洗牌 (TomatoScramble) 视觉混淆算法。基于 Hilbert曲线+黄金比例。受轻微有损压缩影响小。完美满足安全图传需求。
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -570,12 +727,21 @@ export default function Encryptor() {
             
             <div className="flex items-center gap-2">
               <button
+                onClick={handleExportAllPNG}
+                title="受浏览器安全策略限制，若导数量大可能被拦截"
+                disabled={isEncrypting || encryptedResults.filter(r => r.success).length === 0}
+                className="py-1.5 px-3 bg-white hover:bg-slate-50 disabled:opacity-50 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200 shadow-sm cursor-pointer flex items-center gap-1.5 transition-colors hidden sm:flex"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>直接导出纯图</span>
+              </button>
+              <button
                 onClick={handleExportAllZip}
                 disabled={isEncrypting || encryptedResults.filter(r => r.success).length === 0}
                 className="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer flex items-center gap-1.5 transition-colors"
               >
                 <FolderArchive className="w-3.5 h-3.5" />
-                <span>一键打包导出全部 (ZIP)</span>
+                <span>打ZIP包(推荐)</span>
               </button>
               <button
                 onClick={resetAll}
@@ -659,7 +825,7 @@ export default function Encryptor() {
                     </div>
 
                     <div className="absolute bottom-2.5 right-2.5 text-[8px] text-indigo-400 font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
-                      AES-255-GCM
+                      {activeEncryptedItem.mimeType === "image/scramble" ? "HILBERT-1D" : "AES-255-GCM"}
                     </div>
 
                     <img
@@ -686,16 +852,24 @@ export default function Encryptor() {
                       </div>
 
                       <div className="bg-indigo-50/50 p-2.5 border border-indigo-100 rounded-lg">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide block">原始大小 / 载荷量</span>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide block">
+                          {activeEncryptedItem.mimeType === "image/scramble" ? "元素分辨率 / 块数" : "原始大小 / 载荷量"}
+                        </span>
                         <span className="font-bold text-slate-800 block mt-0.5">
-                          {formatSize(activeEncryptedItem.originalSize)} / {formatSize(activeEncryptedItem.payloadSize)}
+                          {activeEncryptedItem.mimeType === "image/scramble" 
+                            ? `${activeEncryptedItem.width}x${activeEncryptedItem.height}  (${activeEncryptedItem.payloadSize} 块)`
+                            : `${formatSize(activeEncryptedItem.originalSize)} / ${formatSize(activeEncryptedItem.payloadSize)}`
+                          }
                         </span>
                       </div>
 
                       <div className="bg-indigo-50/50 p-2.5 border border-indigo-100 rounded-lg">
                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide block">最终格式质地</span>
                         <span className="font-bold text-emerald-600 block mt-0.5">
-                          24-Bit 无损像素 PNG
+                          {activeEncryptedItem.mimeType === "image/scramble" 
+                            ? "无损置乱安全 PNG (无压缩)" 
+                            : "24-Bit 无损像素 PNG"
+                          }
                         </span>
                       </div>
                     </div>
@@ -709,9 +883,41 @@ export default function Encryptor() {
                         下载此张无损画纸
                       </button>
 
+                      {activeEncryptedItem.mimeType === "image/scramble" && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyImageToClipboard(activeEncryptedItem)}
+                          className={`w-full py-2 font-bold rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-all text-xs cursor-pointer ${
+                            copyStatus === "success" ? "bg-emerald-600 text-white hover:bg-emerald-700" :
+                            copyStatus === "error" ? "bg-red-600 text-white" : "bg-amber-500 hover:bg-amber-600 text-slate-950"
+                          }`}
+                        >
+                          {copyStatus === "success" ? (
+                            <>
+                              <ClipboardCheck className="w-3.5 h-3.5" />
+                              <span>已成功复制到剪贴板！</span>
+                            </>
+                          ) : copyStatus === "error" ? (
+                            <>
+                              <Info className="w-3.5 h-3.5" />
+                              <span>复制失败 (长按图片或右键复制)</span>
+                            </>
+                          ) : (
+                            <>
+                              <Clipboard className="w-3.5 h-3.5" />
+                              <span>一键复制加密图片 (推荐)</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
                       {/* Info on mobile long press and disable manual clip */}
                       <p className="text-[10px] text-slate-400 bg-slate-50 border border-slate-100 p-2.5 rounded-lg leading-relaxed font-sans">
-                        💡 <b>提示：</b>操作系统剪贴板原生复制时将对图片进行<b>有损降位压缩</b>，因此禁用一键复制。请使用单纸下载或直接一键打包 ZIP。移动端可通过<b>「长按左侧画纸」</b>保存保存至相册！
+                        {activeEncryptedItem.mimeType === "image/scramble" ? (
+                          <span>💡 <b>置乱优势：</b>分块置乱属于纯物理空间位置排序转换，完全不损坏图像颜色通道质地。因此<b>强烈推荐您使用上述一键复制功能</b>，直接到微信、QQ 聊天框中极速粘贴分享发送进行交流解密！</span>
+                        ) : (
+                          <span>💡 <b>提示：</b>操作系统剪贴板原生复制时将对像素矩阵进行<b>有损降位压缩</b>，因此常规隐写禁用一键复制。请使用单纸下载或直接一键打包 ZIP。移动端可通过<b>「长按左侧画纸」</b>保存！</span>
+                        )}
                       </p>
                     </div>
                   </div>

@@ -3,10 +3,12 @@ import { createPortal } from "react-dom";
 import { 
   FileLock2, Eye, EyeOff, Lock, Play, Music, Video, Image as ImageIcon,
   Download, RefreshCw, FileText, CheckCircle, ShieldAlert, Sparkles, 
-  Clipboard, ClipboardCheck, ClipboardPaste, ZoomIn, ZoomOut, X, Info, Trash2
+  Clipboard, ClipboardCheck, ClipboardPaste, ZoomIn, ZoomOut, X, Info, Trash2, ChevronLeft, ChevronRight,
+  ChevronDown, ChevronUp
 } from "lucide-react";
-import { decodeAndDecryptFromPNG, decryptPayload } from "../utils/crypto";
+import { decodeAndDecryptFromPNG, decryptPayload, decodeDuckMetadata, decodeAndDecryptDuckPNG, getMimeFromExt, unscrambleImage } from "../utils/crypto";
 import { DecryptedFile } from "../types";
+import ImageSequencePlayer from "./ImageSequencePlayer";
 
 // Big Endian UInt32 Reader helper for real-time metadata scanning
 function readUInt32BE(bin: Uint8Array, offset: number): number {
@@ -15,15 +17,16 @@ function readUInt32BE(bin: Uint8Array, offset: number): number {
     (bin[offset + 1] << 16) |
     (bin[offset + 2] << 8) |
     bin[offset + 3]
-  );
+  ) >>> 0;
 }
 
 interface DecryptorProps {
   shouldBlur: boolean;
+  autoFullScreen: boolean;
   onFullScreenToggle?: (isOpen: boolean) => void;
 }
 
-export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorProps) {
+export default function Decryptor({ shouldBlur, autoFullScreen, onFullScreenToggle }: DecryptorProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -43,7 +46,7 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
     id: string;
     file: File;
     hasPassword: boolean | null;
-    metadata: { name: string; type: string; size: number } | null;
+    metadata: { name: string; type: string; size: number; stegType?: string } | null;
   }
   const [scannedQueue, setScannedQueue] = useState<ScannedItem[]>([]);
 
@@ -59,6 +62,8 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
   }
   const [decryptedResults, setDecryptedResults] = useState<DecryptedItem[]>([]);
   const [activePreviewIndex, setActivePreviewIndex] = useState<number>(0);
+  const [isQueueExpanded, setIsQueueExpanded] = useState(false);
+  const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
 
   // Overlay preview state
   const [isFullScreenImage, setIsFullScreenImage] = useState(false);
@@ -85,14 +90,14 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
   }, [decryptedResults]);
 
   // Fast header pre-scanner
-  const scanFileMetadata = async (selectedFile: File): Promise<{ hasPassword: boolean | null; metadata: { name: string; type: string; size: number } | null }> => {
+  const scanFileMetadata = async (selectedFile: File): Promise<{ hasPassword: boolean | null; metadata: { name: string; type: string; size: number; stegType?: string } | null }> => {
     try {
       const rawFileBuffer = await selectedFile.arrayBuffer();
       const rawBytes = new Uint8Array(rawFileBuffer);
       let isAppended = false;
       let packed: Uint8Array | null = null;
       let hasPasswordVal: boolean | null = null;
-      let metaVal: { name: string; type: string; size: number } | null = null;
+      let metaVal: { name: string; type: string; size: number; stegType?: string } | null = null;
       
       if (rawBytes.length >= 12) {
         const last8 = rawBytes.subarray(rawBytes.length - 8);
@@ -149,33 +154,47 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
           const ctx = canvas.getContext("2d");
           if (ctx) {
             ctx.drawImage(img, 0, 0);
-            const totalPixels = img.naturalWidth * img.naturalHeight;
-            const pixelsToRead = Math.min(totalPixels, 12000);
             const imgData = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight).data;
-            const packedData = new Uint8Array(pixelsToRead * 3);
-            for (let i = 0; i < pixelsToRead; i++) {
-              const pixelIdx = i * 4;
-              const packedIdx = i * 3;
-              packedData[packedIdx] = imgData[pixelIdx];
-              packedData[packedIdx + 1] = imgData[pixelIdx + 1];
-              packedData[packedIdx + 2] = imgData[pixelIdx + 2];
-            }
-            if (packedData.length >= 40) {
-              const payloadSize = readUInt32BE(packedData, 0);
-              if (payloadSize > 0 && (payloadSize + 4) <= packedData.length) {
-                const payload = packedData.subarray(4, 4 + payloadSize);
-                const decoder = new TextDecoder();
-                if (payload.length >= 8) {
-                  const magic = decoder.decode(payload.subarray(0, 8));
-                  if (magic === "CSPNG100") {
-                    const metadataLength = readUInt32BE(payload, 36);
-                    if (metadataLength > 0 && (40 + metadataLength) <= payload.length) {
-                      const metadataBytes = payload.subarray(40, 40 + metadataLength);
-                      const metadataText = decoder.decode(metadataBytes);
-                      const meta = JSON.parse(metadataText);
-                      if (meta && meta.name) {
-                        metaVal = meta;
-                        hasPasswordVal = meta.hasPassword !== false;
+            
+            // 1. Try Duck Steganography Scanner
+            const duck = decodeDuckMetadata(imgData, img.naturalWidth, img.naturalHeight);
+            if (duck) {
+              metaVal = {
+                name: `duck_recovered.${duck.ext}`,
+                type: getMimeFromExt(duck.ext),
+                size: duck.dataLen,
+                stegType: "duck" as any
+              };
+              hasPasswordVal = duck.hasPassword;
+            } else {
+              // 2. Fall back to Like混肴 Image Decoder
+              const totalPixels = img.naturalWidth * img.naturalHeight;
+              const pixelsToRead = Math.min(totalPixels, 12000);
+              const packedData = new Uint8Array(pixelsToRead * 3);
+              for (let i = 0; i < pixelsToRead; i++) {
+                const pixelIdx = i * 4;
+                const packedIdx = i * 3;
+                packedData[packedIdx] = imgData[pixelIdx];
+                packedData[packedIdx + 1] = imgData[pixelIdx + 1];
+                packedData[packedIdx + 2] = imgData[pixelIdx + 2];
+              }
+              if (packedData.length >= 40) {
+                const payloadSize = readUInt32BE(packedData, 0);
+                if (payloadSize > 0 && (payloadSize + 4) <= packedData.length) {
+                  const payload = packedData.subarray(4, 4 + payloadSize);
+                  const decoder = new TextDecoder();
+                  if (payload.length >= 8) {
+                    const magic = decoder.decode(payload.subarray(0, 8));
+                    if (magic === "CSPNG100") {
+                      const metadataLength = readUInt32BE(payload, 36);
+                      if (metadataLength > 0 && (40 + metadataLength) <= payload.length) {
+                        const metadataBytes = payload.subarray(40, 40 + metadataLength);
+                        const metadataText = decoder.decode(metadataBytes);
+                        const meta = JSON.parse(metadataText);
+                        if (meta && meta.name) {
+                          metaVal = meta;
+                          hasPasswordVal = meta.hasPassword !== false;
+                        }
                       }
                     }
                   }
@@ -187,6 +206,18 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
           // Silent catch
         } finally {
           URL.revokeObjectURL(imageURL);
+        }
+      }
+
+      if (!metaVal) {
+        if (selectedFile.type.startsWith("image/") || selectedFile.name.match(/\.(png|jpe?g|webp|bmp|gif)$/i)) {
+          metaVal = {
+            name: selectedFile.name,
+            type: selectedFile.type || "image/png",
+            size: selectedFile.size,
+            stegType: "scramble"
+          };
+          hasPasswordVal = false;
         }
       }
 
@@ -354,6 +385,51 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
     const selectedFile = scanned.file;
     const effectivePassword = typedPassword !== undefined ? typedPassword : password;
     
+    // Check if scanned is Block Scramble Image
+    if (scanned.metadata && (scanned.metadata as any).stegType === "scramble") {
+      const imageURL = URL.createObjectURL(selectedFile);
+      const img = new Image();
+      const loadedImage = await new Promise<HTMLImageElement>((resolve, reject) => {
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("图片资源加载失败，这不是一份合法的图像文件。"));
+        img.src = imageURL;
+      });
+      const result = await unscrambleImage(loadedImage, (msg, percent) => {
+        setStepMessage(msg);
+        setProgressPercent(percent);
+      });
+      URL.revokeObjectURL(imageURL);
+      const decryptedBlobURL = URL.createObjectURL(result.blob);
+      return {
+        sourceFileName: selectedFile.name,
+        sourceFileSize: selectedFile.size,
+        success: true,
+        result,
+        fileUrl: decryptedBlobURL
+      };
+    }
+    
+    // Check if scanned is Duck Steganography
+    if (scanned.metadata && (scanned.metadata as any).stegType === "duck") {
+      const imageURL = URL.createObjectURL(selectedFile);
+      const img = new Image();
+      const loadedImage = await new Promise<HTMLImageElement>((resolve, reject) => {
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("图片资源加载失败，这不是一份合法的图像文件。"));
+        img.src = imageURL;
+      });
+      const result = await decodeAndDecryptDuckPNG(loadedImage, effectivePassword);
+      URL.revokeObjectURL(imageURL);
+      const decryptedBlobURL = URL.createObjectURL(result.blob);
+      return {
+        sourceFileName: selectedFile.name,
+        sourceFileSize: selectedFile.size,
+        success: true,
+        result,
+        fileUrl: decryptedBlobURL
+      };
+    }
+    
     // Check trailer first
     const rawFileBuffer = await selectedFile.arrayBuffer();
     const rawBytes = new Uint8Array(rawFileBuffer);
@@ -416,8 +492,8 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
   };
 
   // Run Batch Decryption
-  const handleBatchDecrypt = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleBatchDecrypt = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (scannedQueue.length === 0) return;
 
     try {
@@ -465,15 +541,68 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
       }
 
       setDecryptedResults(outputs);
-      setActivePreviewIndex(0);
       setProgressPercent(100);
       setStepMessage("批量还原完成！");
+
+      const firstSuccess = outputs.find(o => o.success && o.fileUrl);
+      if (firstSuccess) {
+        const firstSuccessIndex = outputs.indexOf(firstSuccess);
+        setActivePreviewIndex(firstSuccessIndex);
+        if (autoFullScreen) {
+          setIsFullScreenImage(true);
+        }
+      } else {
+        setActivePreviewIndex(0);
+      }
     } catch (err: any) {
       setErrorMsg(err?.message || "批量处理过程发生意外中断");
     } finally {
       setIsDecrypting(false);
     }
   };
+
+  // Trigger auto decryption if possible when scannedQueue changes or single file is dropped
+  const queueLengthRef = useRef(0);
+  const passwordRef = useRef(password);
+  useEffect(() => { passwordRef.current = password; }, [password]);
+
+  useEffect(() => {
+    if (scannedQueue.length > 0 && scannedQueue.length > queueLengthRef.current) {
+        const addedCount = scannedQueue.length - queueLengthRef.current;
+        queueLengthRef.current = scannedQueue.length;
+        
+        const newlyAdded = scannedQueue.slice(-addedCount);
+        const needsPassword = newlyAdded.some(i => i.hasPassword === true);
+        
+        if (!needsPassword || passwordRef.current) {
+            handleBatchDecrypt();
+        }
+    } else if (scannedQueue.length === 0) {
+        queueLengthRef.current = 0;
+    }
+  }, [scannedQueue, decryptedResults.length]);
+
+  // Overlay navigational state
+  const prevPreview = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (activePreviewIndex > 0) setActivePreviewIndex(activePreviewIndex - 1);
+  };
+  
+  const nextPreview = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (activePreviewIndex < decryptedResults.length - 1) setActivePreviewIndex(activePreviewIndex + 1);
+  };
+  
+  useEffect(() => {
+    if (!isFullScreenImage) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") prevPreview();
+      if (e.key === "ArrowRight") nextPreview();
+      if (e.key === "Escape") setIsFullScreenImage(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullScreenImage, activePreviewIndex, decryptedResults.length]);
 
   // Helper computations matching active tabs (切换预览!)
   const activeDecryptedItem = decryptedResults[activePreviewIndex];
@@ -615,6 +744,20 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
     if (!decryptedResult || !fileUrl) return null;
     const type = decryptedResult.type;
 
+    if (decryptedResult.isImageSequenceToVideo || type === "video/sequence" || (type === "application/zip" && decryptedResult.comfyNodeMode)) {
+      return (
+        <div className="flex flex-col gap-2 p-1 bg-[#0d0f12] rounded-xl relative w-full">
+          <ImageSequencePlayer
+            zipBlob={decryptedResult.blob}
+            fps={decryptedResult.fps || 30}
+            hasAudio={decryptedResult.audioAttached}
+            audioName={decryptedResult.originalAudioName}
+            shouldBlur={shouldBlur}
+          />
+        </div>
+      );
+    }
+
     if (type.startsWith("image/")) {
       return (
         <div className="flex flex-col items-center justify-center p-2 border border-slate-100 bg-white shadow-sm rounded-xl relative group">
@@ -622,7 +765,7 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
             <img 
               src={fileUrl} 
               alt="解密后图像预览" 
-              className={`max-h-[220px] w-auto object-contain cursor-zoom-in group-hover:opacity-95 transition-all duration-200 ${
+              className={`max-h-[290px] w-auto object-contain cursor-zoom-in group-hover:opacity-95 transition-all duration-200 ${
                 shouldBlur ? "blur-md" : "filter-none"
               }`}
               onClick={() => {
@@ -652,7 +795,7 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
             controls 
             playsInline
             preload="auto"
-            className={`w-full max-h-[220px] h-auto rounded bg-black transition-all duration-200 ${
+            className={`w-full max-h-[290px] h-auto rounded bg-black transition-all duration-200 ${
               shouldBlur ? "blur-md" : "filter-none"
             }`}
           >
@@ -697,29 +840,12 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
 
   return (
     <div className="w-full flex flex-col gap-6 animate-fade-in" id="decryptor-module">
-      {/* Title */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2 relative">
-        <div className="flex items-center gap-3">
-          <span className="relative flex h-3 w-3 sm:hidden">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500"></span>
-          </span>
-          <div className="p-2 rounded-xl bg-pink-50 text-pink-600 hidden sm:block">
-            <FileLock2 className="w-5 h-5" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-base sm:text-lg font-bold text-slate-950 font-display leading-tight">批量解密：密写 PNG 画纸合并像素还原</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5 sm:block hidden">支持导入批量加密 PNG 文件，在浏览器纯本地高效拆解隐写结构并预览/导出</p>
-          </div>
-        </div>
-      </div>
-
       {decryptedResults.length === 0 ? (
         <form onSubmit={handleBatchDecrypt} className="flex flex-col gap-5">
           {/* Main Upload Dropzone area with multi-file support */}
           <div className="flex flex-col gap-2">
             <div className="flex justify-between items-center">
-              <span className="text-xs sm:text-sm font-semibold text-slate-700">步骤 1：提供像素混淆制作的无损加密 PNG 画纸</span>
+              <span className="text-xs sm:text-sm font-semibold text-slate-700">步骤 1：支持大番茄、Like、鸭子的浏览查看</span>
               {scannedQueue.length > 0 && (
                 <button
                   type="button"
@@ -738,7 +864,7 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`border border-dashed rounded-2xl p-5 sm:p-10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
+              className={`border border-dashed rounded-2xl py-4 px-6 sm:py-6 sm:px-12 w-full flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
                 isDragOver
                   ? "border-pink-500 bg-pink-50/40 shadow-[0_0_20px_rgba(236,72,153,0.1)] scale-[0.99]"
                   : "border-slate-200 hover:border-pink-400 hover:bg-slate-5/40"
@@ -752,11 +878,11 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
                 accept="image/png"
                 multiple
               />
-              <div className="p-3 bg-pink-50 text-pink-500 rounded-2xl mb-2.5 transition-transform duration-300 hover:scale-105">
-                <FileLock2 className="w-6 h-6 animate-pulse" />
+              <div className="p-2 bg-pink-50 text-pink-500 rounded-xl mb-1.5 transition-transform duration-300 hover:scale-105">
+                <FileLock2 className="w-5.5 h-5.5 animate-pulse" />
               </div>
               <p className="text-xs sm:text-sm font-bold text-slate-900 text-center">拖拽加密 PNG 图像到这里，或点击浏览本地文件</p>
-              <p className="text-[10px] sm:text-xs text-slate-400 mt-1.5 text-center max-w-lg leading-normal">
+              <p className="text-[10px] sm:text-xs text-slate-400 mt-1 text-center max-w-lg leading-normal">
                 提示：像素隐写还原仅支持未经社交平台二次有损压缩（如微信直接发图）污染破坏的原始无损 PNG 图像
               </p>
               
@@ -766,7 +892,7 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
                   e.stopPropagation();
                   handlePasteFromClipboard();
                 }}
-                className="mt-3.5 px-3.5 py-1.5 bg-pink-50/80 hover:bg-pink-100 text-pink-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm border border-pink-200/40"
+                className="mt-2.5 px-3.5 py-1.5 bg-pink-50/80 hover:bg-pink-100 text-pink-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm border border-pink-200/40"
               >
                 <ClipboardPaste className="w-3.5 h-3.5" />
                 读取剪贴板快捷导入
@@ -924,13 +1050,41 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
       ) : (
         /* METRICS AND DECRYPTED BATCH SWITCH PREVIEW (支持切换预览) */
         <div className="flex flex-col gap-4 animate-fade-in" id="decrypt-success-result">
-          {/* Header Reset bar */}
+          {/* Header Reset bar and Action Buttons */}
           <div className="flex items-center justify-between border-b border-dashed border-slate-100 pb-3 flex-wrap gap-2 mb-1">
             <div className="flex items-center gap-2">
-              <span className="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl font-bold flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5" />
-                <span>一键解剖完成 ({decryptedResults.filter(r => r.success).length} 份就绪 / 共 {decryptedResults.length} 份)</span>
-              </span>
+              {activeDecryptedItem && activeDecryptedItem.success && decryptedResult && (
+                <>
+                  <button
+                    onClick={handleDownload}
+                    className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center shadow-sm transition-colors cursor-pointer"
+                    title="下载还原资产 (Download)"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={handleCopyDecryptedData}
+                    disabled={decryptedResult.type.startsWith("video/")}
+                    className="p-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-350 text-slate-700 rounded-xl flex items-center justify-center transition-colors border border-slate-200 cursor-pointer"
+                    title={
+                      copyStatus === "success" 
+                        ? "已成功复制到剪贴板" 
+                        : copyStatus === "error" 
+                        ? "复制失败，浏览器不支持" 
+                        : "复制媒体数据 (Copy)"
+                    }
+                  >
+                    {copyStatus === "success" ? (
+                      <ClipboardCheck className="w-4 h-4 text-emerald-600 animate-bounce" />
+                    ) : copyStatus === "error" ? (
+                      <Clipboard className="w-4 h-4 text-rose-500" />
+                    ) : (
+                      <Clipboard className="w-4 h-4" />
+                    )}
+                  </button>
+                </>
+              )}
             </div>
             
             <button
@@ -942,145 +1096,158 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
             </button>
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-5 items-stretch">
-            {/* Left Queue list trigger buttons (支持切换预览 / Switching preview!) */}
-            <div className="w-full lg:w-[320px] shrink-0 flex flex-col gap-2">
-              <span className="text-[11px] font-bold text-slate-400 font-mono tracking-wider uppercase">选择还原文件预览详情 ({decryptedResults.length}) :</span>
-              <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 max-h-[380px] lg:overflow-y-auto scrollbar-thin">
-                {decryptedResults.map((item, index) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setActivePreviewIndex(index);
-                    }}
-                    className={`flex items-center gap-3 p-3 text-left border rounded-xl transition-all cursor-pointer w-[240px] lg:w-full flex-shrink-0 lg:flex-shrink relative ${
-                      activePreviewIndex === index
-                        ? "border-pink-500 bg-pink-50/30 shadow-sm"
-                        : "border-slate-150 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="p-1 rounded-lg bg-slate-50 flex-shrink-0">
-                      {item.success && item.result ? (
-                        item.result.type.startsWith("image/") ? (
-                          <ImageIcon className="w-5 h-5 text-rose-400" />
-                        ) : item.result.type.startsWith("audio/") ? (
-                          <Music className="w-5 h-5 text-emerald-400" />
-                        ) : item.result.type.startsWith("video/") ? (
-                          <Video className="w-5 h-5 text-sky-400" />
-                        ) : (
-                          <FileText className="w-5 h-5 text-amber-400" />
-                        )
-                      ) : (
-                        <ShieldAlert className="w-5 h-5 text-red-400" />
-                      )}
-                    </div>
-                    
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-xs font-bold text-slate-900 truncate pr-4" title={item.success && item.result ? item.result.name : item.sourceFileName}>
-                        {item.success && item.result ? item.result.name : item.sourceFileName}
-                      </span>
-                      {item.success && item.result ? (
-                        <span className="text-[10px] text-emerald-600 font-mono font-semibold mt-0.5">
-                          ✅ 已完美还原 • {formatSize(item.result.size)}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-rose-500 font-medium mt-0.5 block truncate">
-                          ❌ 校验未通过: 密码错/被微信压缩
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Right details visual dynamic display */}
-            <div className="flex-1 bg-slate-50/30 border border-slate-150 rounded-2xl p-4 sm:p-5 flex flex-col justify-between self-stretch min-h-[380px]">
-              {activeDecryptedItem ? (
-                activeDecryptedItem.success && decryptedResult ? (
-                  <div className="flex flex-col md:flex-row gap-5 items-stretch h-full">
-                    {/* Visual Preview box */}
-                    <div className="flex-1 w-full bg-slate-50 p-4 border border-slate-200/50 rounded-xl flex flex-col justify-center">
-                      <span className="text-[10px] text-slate-400 font-mono block mb-2 px-1">MEDIA_RENDERER // 媒体在线沙箱</span>
-                      {renderPreviewElement()}
-                    </div>
-
-                    {/* Meta Lists info with downloads */}
-                    <div className="w-full md:w-[240px] shrink-0 flex flex-col justify-between gap-4 text-xs font-sans">
-                      <div className="flex flex-col gap-2.5">
-                        <span className="text-[10px] font-bold text-slate-400 block font-mono">EXTRACTED // 数据明细</span>
-                        
-                        <div className="p-3 bg-white border border-slate-200/60 rounded-xl font-mono text-[11px] text-slate-600 flex flex-col gap-2 shadow-sm">
-                          <div className="flex items-start justify-between gap-3 border-b border-slate-200/30 pb-2">
-                            <span className="text-slate-400 shrink-0">文件名</span>
-                            <span className="font-semibold text-slate-800 break-all text-right select-all">{decryptedResult.name}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3 border-b border-slate-200/30 pb-2">
-                            <span className="text-slate-400 shrink-0">媒体类型</span>
-                            <span className="font-semibold text-indigo-600 truncate max-w-[140px]" title={decryptedResult.type}>{decryptedResult.type}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-slate-400 shrink-0">解出物理量</span>
-                            <span className="font-bold text-emerald-600">{formatSize(decryptedResult.size)}</span>
-                          </div>
+          <div className="flex flex-col gap-4 w-full">
+            {/* Main details visual dynamic display (now fully dominant across width) */}
+            <div className="w-full flex flex-col gap-2">
+              <span className="text-[11px] font-bold text-slate-400 font-mono tracking-wider uppercase">还原数据解析渲染及属性分析 :</span>
+              <div className="bg-slate-50/30 border border-slate-150 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-5 min-h-[470px]">
+                
+                {/* Active items detailed preview and error messages block */}
+                <div className="flex-1">
+                  {activeDecryptedItem ? (
+                    activeDecryptedItem.success && decryptedResult ? (
+                      <div className="w-full h-full">
+                        {/* Visual Preview box */}
+                        <div className="w-full bg-slate-50 p-4 border border-slate-200/50 rounded-xl flex flex-col justify-center">
+                          {renderPreviewElement()}
                         </div>
                       </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-center py-10 w-full">
+                        <span className="p-3 bg-rose-50 text-rose-500 rounded-2xl mb-3">
+                          <ShieldAlert className="w-6 h-6 animate-pulse" />
+                        </span>
+                        <span className="text-sm font-bold text-slate-800">该加密文件解析失败</span>
+                        <p className="text-xs text-slate-400 mt-1.5 max-w-sm leading-normal">
+                          失败原因：{activeDecryptedItem.errorMsg || "此文件可能在传输途中、社交平台或微信中被有损重新压缩或重采样（直接损坏底层像素精细隐写深度），或您输入的密码校验口令不一致！"}
+                        </p>
+                        <div className="mt-4 p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl max-w-sm text-[11px] text-amber-700 text-left font-sans leading-relaxed">
+                          💡 <b>如何避免：</b>请在微信等平台传输时务必以<b>「发送原图」</b>或打包成常规文件包收发，社交平台对非原图的强制格式重构和元数据剥离会使得像素隐写数据永久丢失。
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center text-slate-400 py-10">
+                      <span>请从下方列表选择一份文件预览其解密恢复产物</span>
+                    </div>
+                  )}
+                </div>
 
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={handleDownload}
-                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg flex items-center justify-center gap-1 shadow-sm transition-all text-xs"
-                          title="下载当前选中还原资产"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          下载此独立资产 (Download)
-                        </button>
+                {/* Collapsible Selector Panel at the Bottom */}
+                <div className="border-t border-slate-200/60 pt-3 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsQueueExpanded(!isQueueExpanded)}
+                    className="w-full flex items-center justify-between py-1 px-3 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/40 rounded-xl transition-all text-slate-600 hover:text-slate-900 group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap text-left">
+                      <span className="text-[11px] font-bold font-mono tracking-wider uppercase text-slate-400 group-hover:text-slate-700">
+                        选择还原文件预览详情 ({decryptedResults.length}) :
+                      </span>
+                      <span className="text-[10px] bg-pink-100 text-pink-700 font-mono px-1.5 py-0.5 rounded-md font-semibold shrink-0">
+                        当前选中: #{activePreviewIndex + 1} ({activeDecryptedItem?.success ? "✅ 还原成功" : "❌ 校验未通过"})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium shrink-0">
+                      <span>{isQueueExpanded ? "收起" : "展开详情列表"}</span>
+                      {isQueueExpanded ? <ChevronUp className="w-4 h-4 text-slate-500 animate-fade-in" /> : <ChevronDown className="w-4 h-4 text-slate-500 animate-fade-in" />}
+                    </div>
+                  </button>
 
+                  {isQueueExpanded && (
+                    <div className="mt-3 bg-slate-50/10 border border-slate-150 rounded-2xl p-3 flex gap-2 overflow-x-auto scrollbar-thin animate-fade-in min-h-[90px]">
+                      {decryptedResults.map((item, index) => (
                         <button
-                          onClick={handleCopyDecryptedData}
-                          disabled={decryptedResult.type.startsWith("video/")}
-                          className="w-full py-2 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-350 text-slate-700 font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all text-xs border border-slate-200"
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setActivePreviewIndex(index);
+                          }}
+                          className={`flex items-center gap-2.5 p-2 text-left border rounded-xl transition-all cursor-pointer w-[200px] flex-shrink-0 relative ${
+                            activePreviewIndex === index
+                              ? "border-pink-500 bg-pink-50/40 shadow-sm"
+                              : "border-slate-150 bg-white hover:border-slate-300"
+                          }`}
                         >
-                          {copyStatus === "success" ? (
-                            <>
-                              <ClipboardCheck className="w-3.5 h-3.5 text-emerald-500" />
-                              <span>已复制到剪贴板</span>
-                            </>
-                          ) : copyStatus === "error" ? (
-                            <>
-                              <Clipboard className="w-3.5 h-3.5 text-rose-500" />
-                              <span>复制被拦截或不支持</span>
-                            </>
-                          ) : (
-                            <>
-                              <Clipboard className="w-3.5 h-3.5" />
-                              <span>复制此媒体数据 (Copy)</span>
-                            </>
-                          )}
+                          <div className="p-1 rounded-lg bg-slate-50 flex-shrink-0">
+                            {item.success && item.result ? (
+                              item.result.type.startsWith("image/") ? (
+                                <ImageIcon className="w-4 h-4 text-rose-400" />
+                              ) : item.result.type.startsWith("audio/") ? (
+                                <Music className="w-4 h-4 text-emerald-400" />
+                              ) : item.result.type.startsWith("video/") ? (
+                                <Video className="w-4 h-4 text-sky-400" />
+                              ) : (
+                                <FileText className="w-4 h-4 text-amber-400" />
+                              )
+                            ) : (
+                              <ShieldAlert className="w-4 h-4 text-red-400" />
+                            )}
+                          </div>
+                          
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-[11px] font-bold text-slate-900 truncate pr-2" title={item.success && item.result ? item.result.name : item.sourceFileName}>
+                              {item.success && item.result ? item.result.name : item.sourceFileName}
+                            </span>
+                            {item.success && item.result ? (
+                              <span className="text-[9px] text-emerald-600 font-mono font-semibold mt-0.5">
+                                ✅ {formatSize(item.result.size)}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-rose-500 font-medium mt-0.5 block truncate">
+                                ❌ 校验失败
+                              </span>
+                            )}
+                          </div>
                         </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Status bar for 一键解剖完成 with collapsible details */}
+                <div className="border-t border-dashed border-slate-200/80 pt-3.5 flex flex-col gap-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl font-bold flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>一键解剖完成 ({decryptedResults.filter(r => r.success).length} 份就绪 / 共 {decryptedResults.length} 份)</span>
+                      </span>
+
+                      {activeDecryptedItem && activeDecryptedItem.success && decryptedResult && (
+                        <button
+                          type="button"
+                          onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+                          className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200/60 rounded-xl text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span>{isMetadataExpanded ? "收起明细 (Collapse Details)" : "查看数据明细 (Show Details)"}</span>
+                          {isMetadataExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">SANDBOX_STATUS // SAFE_VERIFIED</span>
+                  </div>
+
+                  {isMetadataExpanded && activeDecryptedItem && activeDecryptedItem.success && decryptedResult && (
+                    <div className="bg-white border border-slate-200/60 rounded-xl font-mono text-[11px] text-slate-650 p-3.5 flex flex-col gap-2 shadow-sm animate-fade-in">
+                      <span className="text-[10px] font-bold text-slate-400 block font-mono border-b border-slate-100 pb-1.5 uppercase">EXTRACTED // 数据明细</span>
+                      <div className="flex items-start justify-between gap-3 border-b border-slate-200/30 pb-2">
+                        <span className="text-slate-400 shrink-0">文件名</span>
+                        <span className="font-semibold text-slate-800 break-all text-right select-all">{decryptedResult.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 border-b border-slate-200/30 pb-2">
+                        <span className="text-slate-400 shrink-0">媒体类型</span>
+                        <span className="font-semibold text-indigo-600 truncate max-w-[240px]" title={decryptedResult.type}>{decryptedResult.type}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-400 shrink-0">解出物理量</span>
+                        <span className="font-bold text-emerald-600">{formatSize(decryptedResult.size)}</span>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center py-10 w-full">
-                    <span className="p-3 bg-rose-50 text-rose-500 rounded-2xl mb-3">
-                      <ShieldAlert className="w-6 h-6 animate-pulse" />
-                    </span>
-                    <span className="text-sm font-bold text-slate-800">该加密文件解析失败</span>
-                    <p className="text-xs text-slate-400 mt-1.5 max-w-sm leading-normal">
-                      失败原因：{activeDecryptedItem.errorMsg || "此文件可能在传输途中、社交平台或微信中被有损重新压缩或重采样（直接损坏底层像素精细隐写深度），或您输入的密码校验口令不一致！"}
-                    </p>
-                    <div className="mt-4 p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl max-w-sm text-[11px] text-amber-700 text-left font-sans leading-relaxed">
-                      💡 <b>如何避免：</b>请在微信等平台传输时务必以<b>「发送原图」</b>或打包成常规文件包收发，社交平台对非原图的强制格式重构和元数据剥离会使得像素隐写数据永久丢失。
-                    </div>
-                  </div>
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
-                  <span>请从左侧列表选择一份文件预览其解密恢复产物</span>
+                  )}
                 </div>
-              )}
+
+              </div>
             </div>
           </div>
         </div>
@@ -1089,7 +1256,7 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
       {/* High-Fidelity Full-Screen Zoom Overlay Modal */}
       {isFullScreenImage && fileUrl && decryptedResult && createPortal(
         <div 
-          className="fixed inset-0 z-[99999] bg-slate-950/80 backdrop-blur-xl flex flex-col justify-between items-center p-4 sm:p-6 overflow-hidden animate-fade-in text-white"
+          className="fixed inset-0 z-[99999] bg-slate-950/95 backdrop-blur-xl flex flex-col justify-between items-center p-2 sm:p-6 overflow-hidden animate-fade-in text-white"
           onClick={() => setIsFullScreenImage(false)}
         >
           {/* Header Bar containing Controls */}
@@ -1183,31 +1350,52 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
 
           {/* Central viewport with scaling */}
           <div 
-            className="flex-grow w-full max-w-5xl flex items-center justify-center overflow-auto min-h-0 relative z-0 p-4"
+            className="flex-grow w-full max-w-none flex items-center justify-center overflow-hidden min-h-0 relative z-0 px-2 sm:px-8 py-2 gap-2 mt-2 sm:mt-0"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Prev Button */}
+            <button
+              onClick={prevPreview}
+              disabled={activePreviewIndex <= 0}
+              className={`absolute left-1 sm:left-4 z-20 p-2 sm:p-3 rounded-full transition-all shrink-0 ${
+                activePreviewIndex <= 0 ? "opacity-0 cursor-default pointer-events-none" : "bg-black/30 hover:bg-black/60 text-white cursor-pointer shadow-lg backdrop-blur-sm border border-white/5"
+              }`}
+            >
+              <ChevronLeft className="w-5 h-5 sm:w-8 sm:h-8" />
+            </button>
+
             <div 
-              className="transition-transform duration-200 ease-out flex items-center justify-center max-h-full max-w-full"
+              className="transition-transform duration-200 ease-out flex items-center justify-center h-full w-full max-w-full overflow-hidden relative z-10"
               style={{ transform: `scale(${zoomLevel / 100})` }}
             >
-              {decryptedResult.type.startsWith("image/") ? (
+              {decryptedResult.isImageSequenceToVideo || decryptedResult.type === "video/sequence" ? (
+                <div className="w-full max-w-xl bg-slate-950 p-4 border border-white/10 rounded-2xl">
+                  <ImageSequencePlayer
+                    zipBlob={decryptedResult.blob}
+                    fps={decryptedResult.fps || 30}
+                    hasAudio={decryptedResult.audioAttached}
+                    audioName={decryptedResult.originalAudioName}
+                    shouldBlur={isBlurredFullScreen}
+                  />
+                </div>
+              ) : decryptedResult.type.startsWith("image/") ? (
                 <img 
                   src={fileUrl} 
                   alt="全屏渲染预览" 
                   referrerPolicy="no-referrer"
-                  className={`max-h-[72vh] sm:max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10 transition-all duration-300 ${
+                  className={`w-auto h-auto max-w-full max-h-full rounded-xl sm:rounded-2xl object-contain shadow-2xl border border-white/5 transition-all duration-300 ${
                     isBlurredFullScreen ? "blur-2xl scale-[1.01]" : "filter-none"
                   }`}
                 />
               ) : decryptedResult.type.startsWith("video/") ? (
                 <video 
-                  key={fileUrl}
+                   key={fileUrl}
                   autoPlay
                   controls
                   playsInline
                   preload="auto"
                   loop
-                  className={`max-h-[72vh] sm:max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10 transition-all duration-300 ${
+                  className={`w-auto h-auto max-w-full max-h-full rounded-xl sm:rounded-2xl object-contain shadow-2xl border border-white/5 transition-all duration-300 ${
                     isBlurredFullScreen ? "blur-2xl scale-[1.01]" : "filter-none"
                   }`}
                 >
@@ -1227,6 +1415,17 @@ export default function Decryptor({ shouldBlur, onFullScreenToggle }: DecryptorP
                 </div>
               )}
             </div>
+
+            {/* Next Button */}
+            <button
+              onClick={nextPreview}
+              disabled={activePreviewIndex >= decryptedResults.length - 1}
+              className={`absolute right-1 sm:right-4 z-20 p-2 sm:p-3 rounded-full transition-all shrink-0 ${
+                activePreviewIndex >= decryptedResults.length - 1 ? "opacity-0 cursor-default pointer-events-none" : "bg-black/30 hover:bg-black/60 text-white cursor-pointer shadow-lg backdrop-blur-sm border border-white/5"
+              }`}
+            >
+              <ChevronRight className="w-5 h-5 sm:w-8 sm:h-8" />
+            </button>
           </div>
 
           {/* Bottom Info Panel */}

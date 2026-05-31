@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { 
   ShieldCheck, ShieldAlert, Lock, Unlock, FileCode, Github, HelpCircle, 
   Grid, Globe, Radio, Sparkles, Layers, Cpu, ArrowRightLeft, FileLock2, Info, Settings,
-  ChevronDown, ChevronUp, BookOpen, Scale
+  ChevronDown, ChevronUp, BookOpen, Scale, ExternalLink
 } from "lucide-react";
 import Encryptor from "./components/Encryptor";
 import Decryptor from "./components/Decryptor";
@@ -16,6 +16,7 @@ import GithubCode from "./components/GithubCode";
 export default function App() {
   const [activeTab, setActiveTab] = useState<"decrypt" | "encrypt">("decrypt");
   const [shouldBlur, setShouldBlur] = useState(false);
+  const [autoFullScreen, setAutoFullScreen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
@@ -77,14 +78,14 @@ export default function App() {
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold font-mono bg-indigo-50 text-indigo-600 border border-indigo-100/60 shadow-sm">
                 <Sparkles className="w-2.5 h-2.5" />
-                V1.0.0 Release
+                V1.5 Release
               </span>
               <span className="hidden sm:inline text-[10px] text-slate-400">• 纯本地沙盒模式</span>
             </div>
             <div className="flex flex-col gap-0.5">
               <h1 className="text-xl sm:text-3xl font-black tracking-tight text-slate-950 font-display flex items-center flex-wrap gap-x-2 gap-y-0.5">
                 <span className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-700 bg-clip-text text-transparent">
-                  Like混肴
+                  Like、duck、混淆图编解Tools
                 </span>
                 <span className="text-[11px] sm:text-sm font-normal text-slate-400 tracking-normal">
                   / 纯本地运行，免云端。
@@ -125,8 +126,18 @@ export default function App() {
                   />
                   <span>将解密后的图片/视频进行模糊</span>
                 </label>
+                <label className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100/70 rounded-xl cursor-pointer transition-colors text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={autoFullScreen}
+                    onChange={(e) => setAutoFullScreen(e.target.checked)}
+                    className="w-4 h-4 text-pink-600 focus:ring-pink-500 border-slate-300 rounded"
+                    id="auto-fullscreen-global-input"
+                  />
+                  <span>解密后是否全屏预览</span>
+                </label>
                 <div className="text-[10px] text-slate-400 leading-normal pl-1 border-t border-slate-100 pt-2">
-                  提示：开启此项后，解密完成时文件预览及全屏状态将默认叠加高斯模糊滤镜。
+                  提示：开启模糊后，解密完成将叠加高斯模糊滤镜。开启全屏预览后，解密完成时将自动开启全屏巨幕查看。
                 </div>
               </div>
             )}
@@ -169,322 +180,413 @@ export default function App() {
           {activeTab === "decrypt" && (
             <Decryptor 
               shouldBlur={shouldBlur} 
+              autoFullScreen={autoFullScreen}
               onFullScreenToggle={(open) => setIsOverlayOpen(open)} 
             />
           )}
           {activeTab === "encrypt" && <Encryptor />}
 
         </div>
-
-        {/* Collapsible Documentations and Tools Area (大分类/小分类全部折叠) */}
-        <div className="mt-8 flex flex-col gap-4" id="bottom-collapsible-docs">
-          <div className="bg-white/70 backdrop-blur-md border border-slate-200/60 rounded-3xl overflow-hidden shadow-sm transition-all duration-205">
-            <button
-              onClick={() => setIsDocsOpen(!isDocsOpen)}
-              className="w-full flex items-center justify-between p-4 sm:p-5 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
+        {activeTab === "encrypt" && (
+          <div className="mt-8 flex flex-col gap-4" id="bottom-collapsible-docs">
+            <a 
+              href="https://github.com/Miqingzi/likeshare" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="bg-white/70 backdrop-blur-md border border-indigo-200/60 rounded-2xl w-full flex items-center justify-center gap-2 p-3.5 hover:bg-indigo-50/80 transition-colors font-display text-indigo-600 shadow-sm cursor-pointer"
             >
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600">
-                  <Layers className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">核心技术白皮书 & 协议指南</h3>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-605 font-mono font-medium">4大板块</span>
-                {isDocsOpen ? (
-                  <ChevronUp className="w-4 h-4 text-slate-400" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
-                )}
-              </div>
-            </button>
+              <ExternalLink className="w-4 h-4" />
+              <span className="font-bold text-[13px] sm:text-sm">Like分享节点 (分块重组 本地ComfyUI部署地址)</span>
+            </a>
 
-            {isDocsOpen && (
-              <div className="border-t border-slate-100 bg-slate-50/30 p-4 sm:p-5 flex flex-col gap-3.5 animate-fade-in">
-                
-                {/* NESTED CATEGORY 1: 操作原理与加密协议 */}
-                <div className="bg-white/90 border border-slate-200/50 rounded-2xl overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => toggleMajor("protocols")}
-                    className="w-full flex items-center justify-between p-4 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-pink-50 text-pink-600">
-                        <BookOpen className="w-3.5 h-3.5" />
+            <div className="bg-white/70 backdrop-blur-md border border-slate-200/60 rounded-3xl overflow-hidden shadow-sm transition-all duration-205">
+              <button
+                onClick={() => setIsDocsOpen(!isDocsOpen)}
+                className="w-full flex items-center justify-between p-4 sm:p-5 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">核心技术白皮书 & 协议指南</h3>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-605 font-mono font-medium">4大板块</span>
+                  {isDocsOpen ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  )}
+                </div>
+              </button>
+
+              {isDocsOpen && (
+                <div className="border-t border-slate-100 bg-slate-50/30 p-4 sm:p-5 flex flex-col gap-3.5 animate-fade-in">
+                  
+                  {/* NESTED CATEGORY 1: 操作原理与加密协议 */}
+                  <div className="bg-white/90 border border-slate-200/50 rounded-2xl overflow-hidden shadow-sm">
+                    <button
+                      onClick={() => toggleMajor("protocols")}
+                      className="w-full flex items-center justify-between p-4 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-pink-50 text-pink-600">
+                          <BookOpen className="w-3.5 h-3.5" />
+                        </div>
+                        <h3 className="font-bold text-slate-900 text-xs sm:text-sm">操作原理与加密协议</h3>
                       </div>
-                      <h3 className="font-bold text-slate-900 text-xs sm:text-sm">操作原理与加密协议</h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-pink-50 text-pink-600 font-mono font-medium">4步详情</span>
-                      {openedMajors.protocols ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-pink-50 text-pink-600 font-mono font-medium">4步详情</span>
+                        {openedMajors.protocols ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                        )}
+                      </div>
+                    </button>
+
+                    {openedMajors.protocols && (
+                      <div className="border-t border-slate-100 bg-slate-50/20 p-3.5 flex flex-col gap-2.5 animate-fade-in">
+                        {/* STEP 1 */}
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("step1")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-pink-50 text-pink-600 font-mono font-bold">STEP 01</span>
+                              <span>无缝一键像素提取</span>
+                            </div>
+                            {openedMinors.step1 ? (
+                              <ChevronUp className="w-3 h-3 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.step1 && (
+                            <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
+                              将生成的标准无损 PNG 塞入解密窗并安全输入密码，核心解密模块会在物理层面毫秒级拼归原位。
+                            </div>
+                          )}
+                        </div>
+
+                        {/* STEP 2 */}
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("step2")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-pink-50 text-pink-600 font-mono font-bold">STEP 02</span>
+                              <span>渲染无损像素画布</span>
+                            </div>
+                            {openedMinors.step2 ? (
+                              <ChevronUp className="w-3 h-3 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.step2 && (
+                            <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
+                              像素点 RGBA 高速重组，采用无插值无失真渲染机制，锁死 Alpha 轴确保不牺牲任一通道，避免边缘溢出损坏字节。
+                            </div>
+                          )}
+                        </div>
+
+                        {/* STEP 3 */}
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("step3")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-indigo-50 text-indigo-600 font-mono font-bold">STEP 03</span>
+                              <span>选择任意机密文件</span>
+                            </div>
+                            {openedMinors.step3 ? (
+                              <ChevronUp className="w-3 h-3 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.step3 && (
+                            <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
+                              支持上传您的私人图片、音效录音或视频剪包（建议限制在 100MB 范围内，以获得极速极客处理体验）。
+                            </div>
+                          )}
+                        </div>
+
+                        {/* STEP 4 */}
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("step4")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-indigo-50 text-indigo-600 font-mono font-bold">STEP 04</span>
+                              <span>强保护派生密码</span>
+                            </div>
+                            {openedMinors.step4 ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.step4 && (
+                            <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
+                              通过 PBKDF2 提取独创高频随机盐派生密文密钥（进行高频哈希迭代），并配合工业级别顶级 AES-GCM 安全算法锁死文件入口。
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* NESTED CATEGORY 2: 传输避坑与安全规范 */}
+                  <div className="bg-white/90 border border-slate-200/50 rounded-2xl overflow-hidden shadow-sm">
+                    <button
+                      onClick={() => toggleMajor("safety")}
+                      className="w-full flex items-center justify-between p-4 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                        </div>
+                        <h3 className="font-bold text-slate-900 text-xs sm:text-sm">传输避坑与安全规范</h3>
+                      </div>
+                      {openedMajors.safety ? (
                         <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
                       ) : (
                         <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                       )}
-                    </div>
-                  </button>
+                    </button>
 
-                  {openedMajors.protocols && (
-                    <div className="border-t border-slate-100 bg-slate-50/20 p-3.5 flex flex-col gap-2.5 animate-fade-in">
-                      {/* STEP 1 */}
-                      <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
-                        <button
-                          onClick={() => toggleMinor("step1")}
-                          className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[8px] px-1 py-0.5 rounded bg-pink-50 text-pink-600 font-mono font-bold">STEP 01</span>
-                            <span>无缝一键像素提取</span>
-                          </div>
-                          {openedMinors.step1 ? (
-                            <ChevronUp className="w-3 h-3 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3 text-slate-400" />
+                    {openedMajors.safety && (
+                      <div className="border-t border-slate-100 bg-slate-50/20 p-3.5 flex flex-col gap-2.5 animate-fade-in">
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("warning")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-amber-50 text-amber-750 font-mono font-bold">IMPORTANT</span>
+                              <span>核心机制与传输破坏说明</span>
+                            </div>
+                            {openedMinors.warning ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.warning && (
+                            <div className="p-4 border-t border-slate-100/50 bg-slate-50/10 text-[11px] text-slate-500 leading-relaxed flex flex-col gap-3 font-sans">
+                              <div>
+                                <span className="text-slate-800 font-bold block mb-1">1. LSB隐秘类 (Like混淆 / Duck隐写)</span>
+                                此两类算法会在图片底层的冗余像素数据（如Alpha通道或低位比特阶）写入无插值二进制有效荷载。微信、QQ、网盘等社交软件在直接发送普通图片时，通常会带有「全画幅压缩」甚至将图片强制转码为非无损的 JPG 格式。<span className="font-bold text-rose-600">任何色彩色彩流变与重采样压缩均会毁灭性地破坏隐藏的二进制流，导致完全无法解密。</span>因此发送时，务必勾选 <b className="text-indigo-600">「发送原图」</b> 或直接打包为 <b className="text-slate-800">ZIP</b> 传输。
+                              </div>
+                              <div className="border-t border-slate-200 pt-2.5">
+                                <span className="text-slate-800 font-bold block mb-1">2. 视觉层图块置乱 (Like-Scramble分块重组/大番茄洗牌)</span>
+                                此方法(TomatoScramble)利用 Hilbert 曲线将 2D 像素打平为 1D 数组进行空间全局位移打乱。此方法极其抗色彩转换与色深压缩。<span className="font-bold text-indigo-600">即便宿主平台进行了重度的 JPG 压缩，解密后依然能够完全表现图像原貌（仅带有普通JPG本身的失真噪点）。</span>但要注意：任何社交平台若对图片进行了 <b className="text-rose-600">画面裁剪、重新放缩宽高分辨率</b>，将会导致几何映射坍塌，解组还原后彻底变成碎片条纹。最稳妥的方式依然是保持原分辨率。
+                              </div>
+                            </div>
                           )}
-                        </button>
-                        {openedMinors.step1 && (
-                          <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
-                            将生成的标准无损 PNG 塞入解密窗并安全输入密码，核心解密模块会在物理层面毫秒级拼归原位。
-                          </div>
-                        )}
+                        </div>
                       </div>
-
-                      {/* STEP 2 */}
-                      <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
-                        <button
-                          onClick={() => toggleMinor("step2")}
-                          className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[8px] px-1 py-0.5 rounded bg-pink-50 text-pink-600 font-mono font-bold">STEP 02</span>
-                            <span>渲染无损像素画布</span>
-                          </div>
-                          {openedMinors.step2 ? (
-                            <ChevronUp className="w-3 h-3 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3 text-slate-400" />
-                          )}
-                        </button>
-                        {openedMinors.step2 && (
-                          <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
-                            像素点 RGBA 高速重组，采用无插值无失真渲染机制，锁死 Alpha 轴确保不牺牲任一通道，避免边缘溢出损坏字节。
-                          </div>
-                        )}
-                      </div>
-
-                      {/* STEP 3 */}
-                      <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
-                        <button
-                          onClick={() => toggleMinor("step3")}
-                          className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[8px] px-1 py-0.5 rounded bg-indigo-50 text-indigo-600 font-mono font-bold">STEP 03</span>
-                            <span>选择任意机密文件</span>
-                          </div>
-                          {openedMinors.step3 ? (
-                            <ChevronUp className="w-3 h-3 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3 text-slate-400" />
-                          )}
-                        </button>
-                        {openedMinors.step3 && (
-                          <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
-                            支持上传您的私人图片、音效录音或视频剪包（建议限制在 100MB 范围内，以获得极速极客处理体验）。
-                          </div>
-                        )}
-                      </div>
-
-                      {/* STEP 4 */}
-                      <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
-                        <button
-                          onClick={() => toggleMinor("step4")}
-                          className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[8px] px-1 py-0.5 rounded bg-indigo-50 text-indigo-600 font-mono font-bold">STEP 04</span>
-                            <span>强保护派生密码</span>
-                          </div>
-                          {openedMinors.step4 ? (
-                            <ChevronUp className="w-3 h-3 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3 text-slate-400" />
-                          )}
-                        </button>
-                        {openedMinors.step4 && (
-                          <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
-                            通过 PBKDF2 提取独创高频随机盐派生密文密钥（进行高频哈希迭代），并配合工业级别顶级 AES-GCM 安全算法锁死文件入口。
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* NESTED CATEGORY 2: 传输避坑与安全规范 */}
-                <div className="bg-white/90 border border-slate-200/50 rounded-2xl overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => toggleMajor("safety")}
-                    className="w-full flex items-center justify-between p-4 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-                        <ShieldAlert className="w-3.5 h-3.5" />
-                      </div>
-                      <h3 className="font-bold text-slate-900 text-xs sm:text-sm">传输避坑与安全规范</h3>
-                    </div>
-                    {openedMajors.safety ? (
-                      <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                     )}
-                  </button>
+                  </div>
 
-                  {openedMajors.safety && (
-                    <div className="border-t border-slate-100 bg-slate-50/20 p-3.5 flex flex-col gap-2.5 animate-fade-in">
-                      <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
-                        <button
-                          onClick={() => toggleMinor("warning")}
-                          className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[8px] px-1 py-0.5 rounded bg-amber-50 text-amber-750 font-mono font-bold">IMPORTANT</span>
-                            <span>社交软件无损/原图机制说明</span>
-                          </div>
-                          {openedMinors.warning ? (
-                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  {/* NESTED CATEGORY 3: 开源协议与自提代码 */}
+                  <div className="bg-white/90 border border-slate-200/50 rounded-2xl overflow-hidden shadow-sm">
+                    <button
+                      onClick={() => toggleMajor("opensource")}
+                      className="w-full flex items-center justify-between p-4 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-zinc-900 text-zinc-50">
+                          <FileCode className="w-3.5 h-3.5" />
+                        </div>
+                        <h3 className="font-bold text-slate-900 text-xs sm:text-sm">开源协议与自提代码</h3>
+                      </div>
+                      {openedMajors.opensource ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                    </button>
+
+                    {openedMajors.opensource && (
+                      <div className="border-t border-slate-100 bg-slate-50/20 p-3.5 flex flex-col gap-2.5 animate-fade-in">
+                        {/* minor 1: Like混肴 */}
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("githubCode")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-zinc-100 text-zinc-700 font-mono font-bold font-sans">Like混肴</span>
+                              <span>完整原生 JS / Python 语言离线解码脚本</span>
+                            </div>
+                            {openedMinors.githubCode ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.githubCode && (
+                            <div className="p-4 border-t border-slate-150/40 bg-white">
+                              <GithubCode />
+                            </div>
                           )}
-                        </button>
-                        {openedMinors.warning && (
-                          <div className="p-3 pt-0 text-[11px] text-slate-500 leading-relaxed border-t border-slate-100/50 bg-slate-50/10">
-                            <span className="text-slate-800 font-semibold block mb-1">跨平台传输安全细节:</span>
-                            Like混肴 会在底层像素写入无插值二进制有效荷载。然而，如微信、QQ、网盘、微博、各种社交宿主软件在直接发送单张普通图片时，通常会有全画幅色深压缩、尺寸甚至还会强转 JPG，瞬间导致信息彻底丢失。请发送时务必：<b className="text-indigo-600">勾选「发送原图」</b> 或直接 <b className="text-slate-800">以 ZIP 压缩包的形式</b> 安全传输。
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                        </div>
 
-                {/* NESTED CATEGORY 3: 开源协议与自提代码 */}
-                <div className="bg-white/90 border border-slate-200/50 rounded-2xl overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => toggleMajor("opensource")}
-                    className="w-full flex items-center justify-between p-4 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-zinc-900 text-zinc-50">
-                        <FileCode className="w-3.5 h-3.5" />
+                        {/* minor 2: Duck隐写 */}
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("duckCode")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-amber-50 text-amber-600 font-mono font-bold font-sans">Duck隐写</span>
+                              <span>原生 JS 基础解码方法参考</span>
+                            </div>
+                            {openedMinors.duckCode ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.duckCode && (
+                            <div className="p-4 border-t border-slate-150/40 bg-slate-950 font-mono text-xs text-slate-300 overflow-x-auto">
+<pre>{`// Duck隐写前端核心JS解码示例
+// 参考项目源码中的 crypto.ts: decodeAndDecryptDuckPNG
+
+const metadataStr = String.fromCharCode(...new Uint8Array(metadataBytes));
+const metadata = JSON.parse(metadataStr);
+
+// 提取密文数据
+const ciphertextBytes = new Uint8Array(
+    decodedBytes.buffer, 
+    decodedBytes.byteOffset + headerOffset + metadataLen
+);
+
+// 解密并读取负载文件
+// 详见源工程crypto.ts文件
+`}</pre>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* minor 3: 分块重组 */}
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("scrambleCode")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-600 font-mono font-bold font-sans">分块重组</span>
+                              <span>原生 JS 及 Node.js 可用解组映射</span>
+                            </div>
+                            {openedMinors.scrambleCode ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.scrambleCode && (
+                            <div className="p-4 border-t border-slate-150/40 bg-slate-950 font-mono text-[11px] text-slate-300 overflow-x-auto">
+<pre>{`// 分块重组依赖于 2D Hilbert 曲线遍历与 Golden Ratio
+// 大番茄像素洗牌算法 (TomatoScramble)
+
+// 1. 生成空间重排序列
+const positions = getHilbertPositions(width, height);
+
+// 2. 根据黄金法则计算固定偏移量
+const FIXED_KEY = 1.0;
+const GOLDEN_RATIO_CONJ = (Math.sqrt(5.0) - 1.0) / 2.0;
+const offset = Math.round(GOLDEN_RATIO_CONJ * total * FIXED_KEY);
+
+// 3. 按照遍历序列进行像素重构
+// 详细提取实现见源码 utils/crypto.ts
+`}</pre>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <h3 className="font-bold text-slate-900 text-xs sm:text-sm">开源协议与自提代码</h3>
-                    </div>
-                    {openedMajors.opensource ? (
-                      <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                     )}
-                  </button>
+                  </div>
 
-                  {openedMajors.opensource && (
-                    <div className="border-t border-slate-100 bg-slate-50/20 p-3.5 flex flex-col gap-2.5 animate-fade-in">
-                      <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
-                        <button
-                          onClick={() => toggleMinor("githubCode")}
-                          className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[8px] px-1 py-0.5 rounded bg-zinc-100 text-zinc-700 font-mono font-bold font-sans">CODE</span>
-                            <span>完整原生 JS / Python 语言离线解码脚本</span>
-                          </div>
-                          {openedMinors.githubCode ? (
-                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  {/* NESTED CATEGORY 4: 开源公用法律声明 */}
+                  <div className="bg-white/90 border border-slate-200/50 rounded-2xl overflow-hidden shadow-sm">
+                    <button
+                      onClick={() => toggleMajor("disclaimer")}
+                      className="w-full flex items-center justify-between p-4 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-slate-100 text-slate-700">
+                          <Scale className="w-3.5 h-3.5" />
+                        </div>
+                        <h3 className="font-bold text-slate-900 text-xs sm:text-sm">开源公用法律声明及免责条款</h3>
+                      </div>
+                      {openedMajors.disclaimer ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                    </button>
+
+                    {openedMajors.disclaimer && (
+                      <div className="border-t border-slate-100 bg-slate-50/20 p-3.5 flex flex-col gap-2.5 animate-fade-in">
+                        <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => toggleMinor("legalText")}
+                            className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-rose-50 text-rose-600 font-mono font-bold">DISCLAIMER</span>
+                              <span>开源协议限制、完全独立免责与合规守法声明条款</span>
+                            </div>
+                            {openedMinors.legalText ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </button>
+                          {openedMinors.legalText && (
+                            <div className="p-4 border-t border-slate-150/40 bg-slate-50/30 text-[11px] text-slate-500 leading-relaxed flex flex-col gap-3 font-sans">
+                              <div>
+                                <span className="text-rose-600 font-bold block mb-1">【重要合规警示 & 法律声明条款】 (Legal Warning & Agreement)</span>
+                                本软件完全基于标准 MIT & Apache-2.0 国际通用开源许可协议进行开放式分发。作为一个纯前端（Client-Side Only）、纯学术研究性质的安全加密与隐写工具（「Like混淆」），所有计算、像素重组与加解密操作均 100% 在用户当前的本地浏览器沙箱内闭环执行，无任何云端或服务器端数据交互。
+                              </div>
+                              <div className="border-t border-slate-200 pt-2.5">
+                                <span className="text-slate-800 font-bold block mb-1">一、 使用者完全守法义务 (Compliance with Laws)</span>
+                                1. 使用本软件的任何个人或实体，<span className="font-bold text-rose-600">在此被强力约束并明示：在使用本工具时，必须严格、无条件地遵守其当前所在司法管辖区的全部法律、法规和政策</span>。
+                                <br />
+                                2. 严禁利用本工具从事任何侵犯他人隐私权、名誉权、商业机密、专利著作权或危害国家安全、社会公共秩序、网络安全的违法活动。
+                              </div>
+                              <div className="border-t border-slate-200 pt-2.5">
+                                <span className="text-slate-800 font-bold block mb-1">二、 完全独立免责与任何损害赔偿宣告 (Absolute Disclaimer)</span>
+                                1. <span className="font-bold text-rose-650">本软件的开发者、贡献者及托管分发平台在此声明拥有绝对且彻底的免责权</span>。用户对本工具的使用（包括但不限于混淆、分发、加解密 or 传播多媒体结果文件）属于其独立主观意志支配的自发行为。所导致的一切法律纠纷、民事责任和连带赔偿，<span className="font-bold text-rose-650">均完全且全权由使用者自行承担</span>。
+                                <br />
+                                2. 任何人由于违反任何法律法规或使用条例所产生的任何安全事件，<span className="font-bold text-rose-650">皆与本项目以及开发者、贡献者完全无关</span>。
+                              </div>
+                              <div className="border-t border-slate-200 pt-2.5 font-mono text-[10px]">
+                                <span className="text-slate-850 font-bold block mb-0.5 font-sans">三、 国际通用开源许可免责原文 (Warranty Disclaimer)</span>
+                                THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+                              </div>
+                            </div>
                           )}
-                        </button>
-                        {openedMinors.githubCode && (
-                          <div className="p-4 border-t border-slate-150/40 bg-white">
-                            <GithubCode />
-                          </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* NESTED CATEGORY 4: 开源公用法律声明 */}
-                <div className="bg-white/90 border border-slate-200/50 rounded-2xl overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => toggleMajor("disclaimer")}
-                    className="w-full flex items-center justify-between p-4 text-left font-display hover:bg-slate-50/50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-slate-100 text-slate-700">
-                        <Scale className="w-3.5 h-3.5" />
-                      </div>
-                      <h3 className="font-bold text-slate-900 text-xs sm:text-sm">开源公用法律声明及免责条款</h3>
-                    </div>
-                    {openedMajors.disclaimer ? (
-                      <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                     )}
-                  </button>
+                  </div>
 
-                  {openedMajors.disclaimer && (
-                    <div className="border-t border-slate-100 bg-slate-50/20 p-3.5 flex flex-col gap-2.5 animate-fade-in">
-                      <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
-                        <button
-                          onClick={() => toggleMinor("legalText")}
-                          className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-[8px] px-1 py-0.5 rounded bg-rose-50 text-rose-600 font-mono font-bold">DISCLAIMER</span>
-                            <span>开源协议限制、完全独立免责与合规守法声明条款</span>
-                          </div>
-                          {openedMinors.legalText ? (
-                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                          )}
-                        </button>
-                        {openedMinors.legalText && (
-                          <div className="p-4 border-t border-slate-150/40 bg-slate-50/30 text-[11px] text-slate-500 leading-relaxed flex flex-col gap-3 font-sans">
-                            <div>
-                              <span className="text-rose-600 font-bold block mb-1">【重要合规警示 & 法律声明条款】 (Legal Warning & Agreement)</span>
-                              本软件完全基于标准 MIT & Apache-2.0 国际通用开源许可协议进行开放式分发。作为一个纯前端（Client-Side Only）、纯学术研究性质的安全加密与隐写工具（「Like混淆」），所有计算、像素重组与加解密操作均 100% 在用户当前的本地浏览器沙箱内闭环执行，无任何云端或服务器端数据交互。
-                            </div>
-                            <div className="border-t border-slate-200 pt-2.5">
-                              <span className="text-slate-800 font-bold block mb-1">一、 使用者完全守法义务 (Compliance with Laws)</span>
-                              1. 使用本软件的任何个人或实体，<span className="font-bold text-rose-600">在此被强力约束并明示：在使用本工具时，必须严格、无条件地遵守其当前所在司法管辖区的全部法律、法规和政策</span>。
-                              <br />
-                              2. 严禁利用本工具从事任何侵犯他人隐私权、名誉权、商业机密、专利著作权或危害国家安全、社会公共秩序、网络安全的违法活动。
-                            </div>
-                            <div className="border-t border-slate-200 pt-2.5">
-                              <span className="text-slate-800 font-bold block mb-1">二、 完全独立免责与任何损害赔偿宣告 (Absolute Disclaimer)</span>
-                              1. <span className="font-bold text-rose-650">本软件的开发者、贡献者及托管分发平台在此声明拥有绝对且彻底的免责权</span>。用户对本工具的使用（包括但不限于混淆、分发、加解密或传播多媒体结果文件）属于其独立主观意志支配的自发行为。所导致的一切法律纠纷、民事责任和连带赔偿，<span className="font-bold text-rose-650">均完全且全权由使用者自行承担</span>。
-                              <br />
-                              2. 任何人由于违反任何法律法规或使用条例所产生的任何安全事件，<span className="font-bold text-rose-650">皆与本项目以及开发者、贡献者完全无关</span>。
-                            </div>
-                            <div className="border-t border-slate-200 pt-2.5 font-mono text-[10px]">
-                              <span className="text-slate-850 font-bold block mb-0.5 font-sans">三、 国际通用开源许可免责原文 (Warranty Disclaimer)</span>
-                              THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
-
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
 
