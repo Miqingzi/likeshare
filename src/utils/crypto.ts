@@ -778,9 +778,9 @@ export function decodeDuckMetadata(
         continue;
       }
       const idx = (y * width + x) * 4;
-      activeChannels.push(imgData[idx + 2]); // B
-      activeChannels.push(imgData[idx + 1]); // G
       activeChannels.push(imgData[idx]);     // R
+      activeChannels.push(imgData[idx + 1]); // G
+      activeChannels.push(imgData[idx + 2]); // B
     }
   }
 
@@ -805,7 +805,7 @@ export function decodeDuckMetadata(
       
       const data_len = (headerBytes[idx] << 24 | headerBytes[idx + 1] << 16 | headerBytes[idx + 2] << 8 | headerBytes[idx + 3]) >>> 0;
       
-      if (ext_len > 0 && /^[a-zA-Z0-9.]+$/.test(ext) && data_len > 0 && (idx + 4 + data_len) <= headerBytes.length) {
+      if (ext_len > 0 && /^[a-zA-Z0-9.]+$/.test(ext) && data_len > 0) {
         return {
           hasPassword: has_pwd,
           ext,
@@ -854,7 +854,7 @@ export function parseDuckHeader(header: Uint8Array, password?: string): { data: 
   
   const data = header.subarray(idx);
   if (data.length !== data_len) {
-    throw new Error("数据载荷大小不协调，图像可能被降质压缩损坏");
+    console.warn("数据载荷大小不协调，图像可能被降质压缩损坏");
   }
   
   if (!has_pwd) {
@@ -975,9 +975,9 @@ export async function decodeAndDecryptDuckPNG(
         continue;
       }
       const idx = (y * width + x) * 4;
-      activeChannels.push(imgData[idx + 2]); // B
-      activeChannels.push(imgData[idx + 1]); // G
       activeChannels.push(imgData[idx]);     // R
+      activeChannels.push(imgData[idx + 1]); // G
+      activeChannels.push(imgData[idx + 2]); // B
     }
   }
 
@@ -1138,9 +1138,9 @@ export async function encryptAndEncodeToDuckPNG(
             continue;
           }
           const idx = (y * width + x) * 4;
-          activeChannels.push(imgData[idx + 2]); // B
-          activeChannels.push(imgData[idx + 1]); // G
           activeChannels.push(imgData[idx]);     // R
+          activeChannels.push(imgData[idx + 1]); // G
+          activeChannels.push(imgData[idx + 2]); // B
         }
       }
 
@@ -1200,9 +1200,9 @@ export async function encryptAndEncodeToDuckPNG(
             continue;
           }
           const idx = (y * width + x) * 4;
-          imgData[idx + 2] = activeChannels[activeIdx++]; // B
-          imgData[idx + 1] = activeChannels[activeIdx++]; // G
           imgData[idx]     = activeChannels[activeIdx++]; // R
+          imgData[idx + 1] = activeChannels[activeIdx++]; // G
+          imgData[idx + 2] = activeChannels[activeIdx++]; // B
         }
       }
 
