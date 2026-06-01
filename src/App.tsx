@@ -196,7 +196,7 @@ export default function App() {
               className="bg-white/70 backdrop-blur-md border border-indigo-200/60 rounded-2xl w-full flex items-center justify-center gap-2 p-3.5 hover:bg-indigo-50/80 transition-colors font-display text-indigo-600 shadow-sm cursor-pointer"
             >
               <ExternalLink className="w-4 h-4" />
-              <span className="font-bold text-[13px] sm:text-sm">Like分享节点 (分块重组 本地ComfyUI部署地址)</span>
+              <span className="font-bold text-[13px] sm:text-sm">Like分享节点 (大番茄混淆图 本地ComfyUI部署地址)</span>
             </a>
 
             <div className="bg-white/70 backdrop-blur-md border border-slate-200/60 rounded-3xl overflow-hidden shadow-sm transition-all duration-205">
@@ -387,7 +387,7 @@ export default function App() {
                                 此两类算法会在图片底层的冗余像素数据（如Alpha通道或低位比特阶）写入无插值二进制有效荷载。微信、QQ、网盘等社交软件在直接发送普通图片时，通常会带有「全画幅压缩」甚至将图片强制转码为非无损的 JPG 格式。<span className="font-bold text-rose-600">任何色彩色彩流变与重采样压缩均会毁灭性地破坏隐藏的二进制流，导致完全无法解密。</span>因此发送时，务必勾选 <b className="text-indigo-600">「发送原图」</b> 或直接打包为 <b className="text-slate-800">ZIP</b> 传输。
                               </div>
                               <div className="border-t border-slate-200 pt-2.5">
-                                <span className="text-slate-800 font-bold block mb-1">2. 视觉层图块置乱 (Like-Scramble分块重组/大番茄洗牌)</span>
+                                <span className="text-slate-800 font-bold block mb-1">2. 视觉层图块置乱 (大番茄混淆图)</span>
                                 此方法(TomatoScramble)利用 Hilbert 曲线将 2D 像素打平为 1D 数组进行空间全局位移打乱。此方法极其抗色彩转换与色深压缩。<span className="font-bold text-indigo-600">即便宿主平台进行了重度的 JPG 压缩，解密后依然能够完全表现图像原貌（仅带有普通JPG本身的失真噪点）。</span>但要注意：任何社交平台若对图片进行了 <b className="text-rose-600">画面裁剪、重新放缩宽高分辨率</b>，将会导致几何映射坍塌，解组还原后彻底变成碎片条纹。最稳妥的方式依然是保持原分辨率。
                               </div>
                             </div>
@@ -478,14 +478,14 @@ const ciphertextBytes = new Uint8Array(
                           )}
                         </div>
 
-                        {/* minor 3: 分块重组 */}
+                        {/* minor 3: 大番茄混淆图 */}
                         <div className="bg-white border border-slate-200/50 rounded-xl overflow-hidden">
                           <button
                             onClick={() => toggleMinor("scrambleCode")}
                             className="w-full flex items-center justify-between p-2.5 text-left text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
                           >
                             <div className="flex items-center gap-2">
-                              <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-600 font-mono font-bold font-sans">分块重组</span>
+                              <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-600 font-mono font-bold font-sans">大番茄洗牌</span>
                               <span>原生 JS 及 Node.js 可用解组映射</span>
                             </div>
                             {openedMinors.scrambleCode ? (
@@ -496,7 +496,7 @@ const ciphertextBytes = new Uint8Array(
                           </button>
                           {openedMinors.scrambleCode && (
                             <div className="p-4 border-t border-slate-150/40 bg-slate-950 font-mono text-[11px] text-slate-300 overflow-x-auto">
-<pre>{`// 分块重组依赖于 2D Hilbert 曲线遍历与 Golden Ratio
+<pre>{`// 大番茄混淆图依赖于 2D Hilbert 曲线遍历与 Golden Ratio
 // 大番茄像素洗牌算法 (TomatoScramble)
 
 // 1. 生成空间重排序列

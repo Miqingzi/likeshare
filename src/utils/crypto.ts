@@ -718,45 +718,42 @@ function generateKeyStream(password: string, salt: Uint8Array, length: number): 
 }
 
 function extractPayloadWithK(activeChannels: number[], k: number): Uint8Array {
-  const totalBitsCount = activeChannels.length * k;
-  const bits = new Uint8Array(totalBitsCount);
   let bitIdx = 0;
-  
-  for (let i = 0; i < activeChannels.length; i++) {
-    const v = activeChannels[i];
-    for (let j = 0; j < k; j++) {
-      bits[bitIdx++] = (v >> (k - 1 - j)) & 1;
-    }
+  function getBit(index: number): number {
+    const channelIdx = Math.floor(index / k);
+    if (channelIdx >= activeChannels.length) return 0;
+    const bitPosInChannel = k - 1 - (index % k);
+    return (activeChannels[channelIdx] >> bitPosInChannel) & 1;
   }
-  
-  if (bits.length < 32) {
+
+  if (activeChannels.length * k < 32) {
     throw new Error("图像空间数据过少，无法解析前导头部");
   }
-  
+
   let header_len = 0;
   for (let i = 0; i < 32; i++) {
-    if (bits[i]) {
+    if (getBit(i)) {
       header_len |= (1 << (31 - i));
     }
   }
-  
+  header_len >>>= 0;
+
   const total_bits = 32 + header_len * 8;
-  if (header_len <= 0 || total_bits > bits.length) {
+  if (header_len <= 0 || total_bits > activeChannels.length * k) {
     throw new Error("鸭子载荷溢出或前导标识不符");
   }
-  
-  const payloadBits = bits.subarray(32, 32 + header_len * 8);
+
   const payloadBytes = new Uint8Array(header_len);
   for (let i = 0; i < header_len; i++) {
     let byte = 0;
     for (let j = 0; j < 8; j++) {
-      if (payloadBits[i * 8 + j]) {
+      if (getBit(32 + i * 8 + j)) {
         byte |= (1 << (7 - j));
       }
     }
     payloadBytes[i] = byte;
   }
-  
+
   return payloadBytes;
 }
 
@@ -781,9 +778,9 @@ export function decodeDuckMetadata(
         continue;
       }
       const idx = (y * width + x) * 4;
-      activeChannels.push(imgData[idx]);     // R
-      activeChannels.push(imgData[idx + 1]); // G
       activeChannels.push(imgData[idx + 2]); // B
+      activeChannels.push(imgData[idx + 1]); // G
+      activeChannels.push(imgData[idx]);     // R
     }
   }
 
@@ -978,9 +975,9 @@ export async function decodeAndDecryptDuckPNG(
         continue;
       }
       const idx = (y * width + x) * 4;
-      activeChannels.push(imgData[idx]);     // R
-      activeChannels.push(imgData[idx + 1]); // G
       activeChannels.push(imgData[idx + 2]); // B
+      activeChannels.push(imgData[idx + 1]); // G
+      activeChannels.push(imgData[idx]);     // R
     }
   }
 
@@ -1083,9 +1080,9 @@ export async function encryptAndEncodeToDuckPNG(
   idx += extLen;
 
   // 7. data_len
-  payloadBytes[idx++] = (dataLen >> 24) & 0xff;
-  payloadBytes[idx++] = (dataLen >> 16) & 0xff;
-  payloadBytes[idx++] = (dataLen >> 8) & 0xff;
+  payloadBytes[idx++] = (dataLen >>> 24) & 0xff;
+  payloadBytes[idx++] = (dataLen >>> 16) & 0xff;
+  payloadBytes[idx++] = (dataLen >>> 8) & 0xff;
   payloadBytes[idx++] = dataLen & 0xff;
 
   // 8. data
@@ -1141,34 +1138,20 @@ export async function encryptAndEncodeToDuckPNG(
             continue;
           }
           const idx = (y * width + x) * 4;
-          activeChannels.push(imgData[idx]);     // R
-          activeChannels.push(imgData[idx + 1]); // G
           activeChannels.push(imgData[idx + 2]); // B
+          activeChannels.push(imgData[idx + 1]); // G
+          activeChannels.push(imgData[idx]);     // R
         }
       }
 
       onProgress?.("正在组装隐写画纸与混合密文...", 85);
 
-      // Construct raw bitstream
       const headerLen = payloadBytes.length;
       const totalBitStreamLength = 32 + headerLen * 8;
-      const bitStream = new Uint8Array(totalBitStreamLength);
-
-      for (let i = 0; i < 32; i++) {
-        bitStream[i] = (headerLen >> (31 - i)) & 1;
-      }
-
-      let bitStreamIdx = 32;
-      for (let i = 0; i < headerLen; i++) {
-        const byte = payloadBytes[i];
-        for (let j = 0; j < 8; j++) {
-          bitStream[bitStreamIdx++] = (byte >> (7 - j)) & 1;
-        }
-      }
 
       // Determine k in [2, 6, 8]
       let k = 8;
-      const targetRequiredBits = bitStream.length;
+      const targetRequiredBits = totalBitStreamLength;
       if (activeChannels.length * 2 >= targetRequiredBits) {
         k = 2;
       } else if (activeChannels.length * 6 >= targetRequiredBits) {
@@ -1180,16 +1163,26 @@ export async function encryptAndEncodeToDuckPNG(
         return;
       }
 
-      // Embed bits into activeChannels
+      // Embed bits into activeChannels on the fly
       let streamIdx = 0;
       for (let i = 0; i < activeChannels.length; i++) {
-        if (streamIdx >= bitStream.length) {
+        if (streamIdx >= totalBitStreamLength) {
           break;
         }
 
         let newLowestBits = 0;
         for (let j = 0; j < k; j++) {
-          const bitVal = (streamIdx < bitStream.length) ? bitStream[streamIdx++] : 0;
+          let bitVal = 0;
+          if (streamIdx < totalBitStreamLength) {
+            if (streamIdx < 32) {
+              bitVal = (headerLen >>> (31 - streamIdx)) & 1;
+            } else {
+              const byteIdx = (streamIdx - 32) >> 3;
+              const bitOffset = 7 - ((streamIdx - 32) & 7);
+              bitVal = (payloadBytes[byteIdx] >> bitOffset) & 1;
+            }
+            streamIdx++;
+          }
           newLowestBits |= (bitVal << (k - 1 - j));
         }
 
@@ -1207,9 +1200,9 @@ export async function encryptAndEncodeToDuckPNG(
             continue;
           }
           const idx = (y * width + x) * 4;
-          imgData[idx]     = activeChannels[activeIdx++]; // R
-          imgData[idx + 1] = activeChannels[activeIdx++]; // G
           imgData[idx + 2] = activeChannels[activeIdx++]; // B
+          imgData[idx + 1] = activeChannels[activeIdx++]; // G
+          imgData[idx]     = activeChannels[activeIdx++]; // R
         }
       }
 

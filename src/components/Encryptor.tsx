@@ -4,7 +4,7 @@ import {
   Download, RefreshCw, CheckCircle, Shield, Sparkles, Clipboard, ClipboardCheck, 
   ClipboardPaste, Trash2, FolderArchive, FileCheck, Info, Film, Sliders, Volume2, Settings
 } from "lucide-react";
-import { encryptAndEncodeToPNG, encryptAndEncodeToDuckPNG, scrambleImage } from "../utils/crypto";
+import { encryptAndEncodeToPNG, scrambleImage } from "../utils/crypto";
 import JSZip from "jszip";
 
 export default function Encryptor() {
@@ -14,7 +14,7 @@ export default function Encryptor() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [pasteError, setPasteError] = useState("");
 
-  const [stegMode, setStegMode] = useState<"like" | "duck" | "scramble">("like");
+  const [stegMode, setStegMode] = useState<"like" | "scramble">("like");
   const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">("idle");
 
   // Encryption states
@@ -224,7 +224,7 @@ export default function Encryptor() {
           let result;
           if (stegMode === "scramble") {
             if (!targetFile.type.startsWith("image/") && !targetFile.name.match(/\.(png|jpe?g|webp|bmp|gif)$/i)) {
-              throw new Error("Like分块置乱仅支持图片格式文件(如 PNG / JPG / BMP)！");
+              throw new Error("大番茄混淆图仅支持图片格式文件(如 PNG / JPG / BMP)！");
             }
             result = await scrambleImage(targetFile, (msg, percent) => {
               setStepMessage(`${filePrefix}: ${msg}`);
@@ -232,8 +232,7 @@ export default function Encryptor() {
               setProgressPercent(combinedPercent);
             });
           } else {
-            const encryptFunc = stegMode === "duck" ? encryptAndEncodeToDuckPNG : encryptAndEncodeToPNG;
-            result = await encryptFunc(targetFile, password, (msg, percent) => {
+            result = await encryptAndEncodeToPNG(targetFile, password, (msg, percent) => {
               setStepMessage(`${filePrefix}: ${msg}`);
               const combinedPercent = Math.round((i / totalFiles) * 100 + (percent / totalFiles));
               setProgressPercent(combinedPercent);
@@ -540,7 +539,7 @@ export default function Encryptor() {
                 <label className="text-xs sm:text-sm font-semibold text-slate-800 flex items-center justify-between">
                   <span>步骤 2：设定解密口令 (批处理公用)</span>
                   <span className="text-[10px] sm:text-xs font-normal text-slate-400">
-                    {stegMode === "scramble" ? "分块重组不支持密码加密" : "留空则为通用免密。所有文件将应用此统一密钥"}
+                    {stegMode === "scramble" ? "大番茄混淆图不支持密码加密" : "留空则为通用免密。所有文件将应用此统一密钥"}
                   </span>
                 </label>
                 <div className="relative">
@@ -552,7 +551,7 @@ export default function Encryptor() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isEncrypting || stegMode === "scramble"}
-                    placeholder={stegMode === "scramble" ? "Like-Scramble分块重组无需密码" : "[可选密码] 输入相同的解密密码，保障机密完整隔离"}
+                    placeholder={stegMode === "scramble" ? "大番茄混淆图无需密码" : "[可选密码] 输入相同的解密密码，保障机密完整隔离"}
                     className={`w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 text-slate-900 font-mono transition-shadow duration-200 ${stegMode === "scramble" ? "bg-slate-100 text-slate-400" : "bg-white"}`}
                   />
                   <button
@@ -625,33 +624,7 @@ export default function Encryptor() {
                   </p>
                 </div>
 
-                {/* Option 2: Duck LSB Steganography */}
-                <div
-                  onClick={() => setStegMode("duck")}
-                  className={`flex flex-col gap-2 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 select-none ${
-                    stegMode === "duck"
-                      ? "bg-emerald-500/5 border-emerald-500 shadow-sm animate-fade-in"
-                      : "bg-white/80 border-slate-200/80 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className={`font-bold text-xs sm:text-sm ${stegMode === "duck" ? "text-emerald-600" : "text-slate-800"}`}>
-                      🦆 Duck隐写 (Yaya Steg)
-                    </span>
-                    <input
-                      type="radio"
-                      name="stegMode"
-                      checked={stegMode === "duck"}
-                      onChange={() => setStegMode("duck")}
-                      className="w-3.5 h-3.5 accent-emerald-600 cursor-pointer"
-                    />
-                  </div>
-                  <p className="text-[10px] sm:text-xs text-slate-500 leading-relaxed font-sans">
-                    兼容 SS_tools 经典 Yaya 隐写格式。自动进行自对齐比特无损嵌入，具有极佳的视觉隐蔽度及恢复稳定性。
-                  </p>
-                </div>
-
-                {/* Option 3: Like Block Scramble (For Images Only) */}
+                {/* Option 3: Tomato Block Scramble (For Images Only) */}
                 <div
                   onClick={() => setStegMode("scramble")}
                   className={`flex flex-col gap-2 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 select-none ${
@@ -662,7 +635,7 @@ export default function Encryptor() {
                 >
                   <div className="flex items-center justify-between">
                     <span className={`font-bold text-xs sm:text-sm ${stegMode === "scramble" ? "text-amber-600" : "text-slate-800"}`}>
-                      🧩 Like-Scramble (分块重组)
+                      🧩 大番茄混淆图
                     </span>
                     <input
                       type="radio"
