@@ -453,7 +453,7 @@ export default function Encryptor() {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`border border-dashed rounded-2xl p-5 sm:p-10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
+              className={`border border-dashed rounded-2xl p-5 sm:p-10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 min-h-[280px] xs:min-h-[350px] sm:min-h-[420px] md:min-h-[480px] h-[30vh] sm:h-[40vh] md:h-[45vh] max-h-[600px] ${
                 isDragOver
                   ? "border-indigo-500 bg-indigo-50/40 shadow-[0_0_20px_rgba(99,102,241,0.1)] scale-[0.99]"
                   : "border-slate-200 hover:border-indigo-400 hover:bg-slate-5/40"

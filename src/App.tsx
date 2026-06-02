@@ -80,7 +80,6 @@ export default function App() {
                 <Sparkles className="w-2.5 h-2.5" />
                 V1.5 Release
               </span>
-              <span className="hidden sm:inline text-[10px] text-slate-400">• 纯本地沙盒模式</span>
             </div>
             <div className="flex flex-col gap-0.5">
               <h1 className="text-xl sm:text-3xl font-black tracking-tight text-slate-950 font-display flex items-center flex-wrap gap-x-2 gap-y-0.5">
@@ -174,7 +173,7 @@ export default function App() {
         </div>
 
         {/* Dynamic Inner Panel Card (Glassmorphism ultra effect) */}
-        <div className="bg-white/70 text-slate-800 rounded-3xl p-4 sm:p-7 shadow-xl border border-white/90 flex flex-col gap-6 relative backdrop-blur-xl animate-fade-in" id="main-content-canvas">
+        <div className="bg-white/70 text-slate-800 rounded-3xl p-4 sm:p-7 shadow-xl border border-white/90 flex flex-col gap-6 relative backdrop-blur-xl animate-fade-in min-h-[380px] xs:min-h-[450px] sm:min-h-[550px] md:min-h-[620px] h-auto" id="main-content-canvas">
           
           {/* Active component renderer */}
           {activeTab === "decrypt" && (

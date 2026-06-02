@@ -864,7 +864,7 @@ export default function Decryptor({ shouldBlur, autoFullScreen, onFullScreenTogg
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`border border-dashed rounded-2xl py-4 px-6 sm:py-6 sm:px-12 w-full flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
+              className={`border border-dashed rounded-2xl py-4 px-6 sm:py-6 sm:px-12 w-full flex flex-col items-center justify-center cursor-pointer transition-all duration-300 min-h-[280px] xs:min-h-[350px] sm:min-h-[420px] md:min-h-[480px] h-[30vh] sm:h-[40vh] md:h-[45vh] max-h-[600px] ${
                 isDragOver
                   ? "border-pink-500 bg-pink-50/40 shadow-[0_0_20px_rgba(236,72,153,0.1)] scale-[0.99]"
                   : "border-slate-200 hover:border-pink-400 hover:bg-slate-5/40"
