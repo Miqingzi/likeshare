@@ -1,6 +1,36 @@
 {
-  "name": "Like混淆",
-  "description": "超轻量本地多媒体资产像素级混淆与解构防护器，高强度本地安全编码。所有的逻辑与加解密流程在浏览器前端本地进行，100% 拒绝数据外泄。",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "name": "Like Transition - Image Encryption",
+  "description": "ComfyUI nodes for image encryption and decryption using AES-256-GCM",
+  "version": "1.0.0",
+  "author": "Miqingzi",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/Miqingzi/Like-transition",
+  "category": "image/encryption",
+  "tags": [
+    "encryption",
+    "decryption",
+    "aes",
+    "security",
+    "privacy",
+    "image",
+    "comfyui"
+  ],
+  "nodes": [
+    {
+      "name": "EncryptImage",
+      "display_name": "Encrypt Image",
+      "description": "Encrypts an image using AES-256-GCM encryption with password-based key derivation"
+    },
+    {
+      "name": "DecryptImage",
+      "display_name": "Decrypt Image",
+      "description": "Decrypts an image encrypted with the Encrypt Image node"
+    }
+  ],
+  "python_requires": ">=3.8",
+  "requirements": [
+    "cryptography>=41.0.0",
+    "pillow>=10.0.0",
+    "numpy>=1.24.0"
+  ]
 }
