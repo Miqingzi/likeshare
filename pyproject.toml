@@ -16,6 +16,6 @@ Documentation = "https://github.com/Miqingzi/likeshare#readme"
 "Bug Tracker" = "https://github.com/Miqingzi/likeshare/issues"
 
 [tool.comfy]
-PublisherId = "YOUR_PUBLISHER_ID"
+PublisherId = "fengjunzi"
 DisplayName = "LikeShare Image Obfuscator"
 requires-comfyui = ">=1.0.0"
