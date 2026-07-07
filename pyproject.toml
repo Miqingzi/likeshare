@@ -1,0 +1,21 @@
+[project]
+name = "likeshare-image-obfuscator"
+version = "1.0.0"
+description = "ComfyUI nodes for LikeShare image obfuscation and restoration using a Hilbert-curve pixel shuffle."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = []
+classifiers = [
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/Miqingzi/likeshare"
+Documentation = "https://github.com/Miqingzi/likeshare#readme"
+"Bug Tracker" = "https://github.com/Miqingzi/likeshare/issues"
+
+[tool.comfy]
+PublisherId = "YOUR_PUBLISHER_ID"
+DisplayName = "LikeShare Image Obfuscator"
+requires-comfyui = ">=1.0.0"
