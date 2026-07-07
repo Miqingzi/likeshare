@@ -1,6 +1,6 @@
 [project]
 name = "likeshare-image-obfuscator"
-version = "1.0.0"
+version = "1.0.1"
 description = "ComfyUI nodes for LikeShare image obfuscation and restoration using a Hilbert-curve pixel shuffle."
 readme = "README.md"
 license = { file = "LICENSE" }
