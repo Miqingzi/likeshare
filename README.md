@@ -23,10 +23,4 @@ Clone or copy this directory into `ComfyUI/custom_nodes/`, then restart ComfyUI.
 - The algorithm uses a fixed internal key to stay compatible with the intended LikeShare/Tomato-style obfuscation flow.
 - This node only processes image tensors and does not modify files on disk.
 
-## Publishing Checklist
 
-Before publishing to the Comfy Registry, replace these placeholders in `pyproject.toml`:
-
-- `YOUR_PUBLISHER_ID`
-
-Then create your publisher/API key and publish with `comfy node publish`.
